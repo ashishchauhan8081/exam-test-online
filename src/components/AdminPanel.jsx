@@ -13,6 +13,7 @@ import {
   onValue,
   set,
   remove,
+  update,
 } from "firebase/database";
 
 import {
@@ -287,6 +288,22 @@ export default function AdminPanel({
     useState(Date.now());
 
   /* =======================================================
+     STUDENT SUPPORT MESSAGES
+  ======================================================= */
+
+  const [supportMessages, setSupportMessages] =
+    useState([]);
+
+  const [supportLoading, setSupportLoading] =
+    useState(true);
+
+  const [supportReply, setSupportReply] =
+    useState({});
+
+  const [supportSaving, setSupportSaving] =
+    useState({});
+
+  /* =======================================================
      AUTH LISTENER
   ======================================================= */
 
@@ -368,6 +385,50 @@ export default function AdminPanel({
   }, []);
 
   /* =======================================================
+     LOAD STUDENT SUPPORT MESSAGES
+  ======================================================= */
+
+  useEffect(() => {
+    const supportRef = ref(db, "supportMessages");
+
+    const unsubscribe = onValue(
+      supportRef,
+      (snapshot) => {
+        const value = snapshot.val();
+
+        if (!value) {
+          setSupportMessages([]);
+          setSupportLoading(false);
+          return;
+        }
+
+        const list = Object.entries(value)
+          .map(([id, item]) => ({
+            id,
+            ...(item || {}),
+          }))
+          .sort(
+            (a, b) =>
+              Number(b.createdAt || 0) -
+              Number(a.createdAt || 0)
+          );
+
+        setSupportMessages(list);
+        setSupportLoading(false);
+      },
+      (error) => {
+        console.error(
+          "Support messages load error:",
+          error
+        );
+        setSupportLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  /* =======================================================
      AUTH LOADING
   ======================================================= */
 
@@ -416,6 +477,129 @@ export default function AdminPanel({
       </div>
     );
   }
+
+  /* =======================================================
+     SUPPORT HELPERS
+  ======================================================= */
+
+  const formatSupportTime = (timestamp) => {
+    if (!timestamp) return "";
+
+    try {
+      return new Date(timestamp).toLocaleString(
+        "hi-IN",
+        {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      );
+    } catch {
+      return "";
+    }
+  };
+
+  const saveSupportReply = async (item) => {
+    const reply = (supportReply[item.id] || "").trim();
+
+    if (!reply) {
+      alert("पहले Reply लिखें।");
+      return;
+    }
+
+    try {
+      setSupportSaving((prev) => ({
+        ...prev,
+        [item.id]: true,
+      }));
+
+      await update(
+        ref(db, `supportMessages/${item.id}`),
+        {
+          adminReply: reply,
+          status: "replied",
+          repliedBy:
+            currentUser?.email || ADMIN_EMAIL,
+          updatedAt: Date.now(),
+        }
+      );
+
+      setSupportReply((prev) => ({
+        ...prev,
+        [item.id]: "",
+      }));
+
+      setMessage("✅ Student को Reply save हो गया।");
+    } catch (error) {
+      console.error(
+        "Support reply error:",
+        error
+      );
+
+      alert(
+        `❌ Reply Save Error: ${
+          error?.message || "Unknown error"
+        }`
+      );
+    } finally {
+      setSupportSaving((prev) => ({
+        ...prev,
+        [item.id]: false,
+      }));
+    }
+  };
+
+  const deleteSupportMessage = async (item) => {
+    const ok = window.confirm(
+      `क्या आप ${item.name || "Student"} का यह Support message delete करना चाहते हैं?`
+    );
+
+    if (!ok) return;
+
+    try {
+      await remove(
+        ref(db, `supportMessages/${item.id}`)
+      );
+
+      setMessage("🗑️ Support message delete हो गया।");
+    } catch (error) {
+      console.error(
+        "Support delete error:",
+        error
+      );
+
+      alert(
+        `❌ Delete Error: ${
+          error?.message || "Unknown error"
+        }`
+      );
+    }
+  };
+
+  const openStudentWhatsApp = (item) => {
+    const mobile = String(item.mobile || "")
+      .replace(/\D/g, "");
+
+    if (!mobile) {
+      alert("इस Student का mobile number उपलब्ध नहीं है।");
+      return;
+    }
+
+    const number = mobile.length === 10
+      ? `91${mobile}`
+      : mobile;
+
+    const text = encodeURIComponent(
+      `नमस्ते ${item.name || "Student"},\n\nआपकी समस्या के संबंध में Study With Power Support से संपर्क किया जा रहा है।`
+    );
+
+    window.open(
+      `https://wa.me/${number}?text=${text}`,
+      "_blank"
+    );
+  };
 
   /* =======================================================
      HELPERS
@@ -1535,6 +1719,37 @@ ${error?.message || "Unknown error"}`
           📂 Resources
         </button>
 
+        <button
+          className={
+            activeSection === "support"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setActiveSection("support")
+          }
+        >
+          💬 Support
+          {supportMessages.filter(
+            (item) => item.status !== "replied"
+          ).length > 0 && (
+            <span
+              style={{
+                marginLeft: "6px",
+                background: "#dc2626",
+                color: "#fff",
+                borderRadius: "999px",
+                padding: "2px 7px",
+                fontSize: "11px",
+              }}
+            >
+              {supportMessages.filter(
+                (item) => item.status !== "replied"
+              ).length}
+            </span>
+          )}
+        </button>
+
       </div>
 
       <main className="admin-content">
@@ -2316,6 +2531,189 @@ ${error?.message || "Unknown error"}`
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* =================================================
+            STUDENT SUPPORT
+        ================================================= */}
+
+        {activeSection === "support" && (
+          <div className="admin-card">
+
+            <div className="card-title">
+              <div>
+                <h2>💬 Student Support Messages</h2>
+                <p>
+                  Students की भेजी हुई समस्याएँ यहाँ दिखाई देंगी।
+                </p>
+              </div>
+
+              <div
+                style={{
+                  fontWeight: "700",
+                  color: "#2563eb",
+                }}
+              >
+                कुल: {supportMessages.length}
+              </div>
+            </div>
+
+            {supportLoading ? (
+              <div className="empty-box">
+                ⏳ Messages load हो रहे हैं...
+              </div>
+            ) : supportMessages.length === 0 ? (
+              <div className="empty-box">
+                अभी कोई Student Support message नहीं आया है।
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "14px",
+                }}
+              >
+                {supportMessages.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "14px",
+                      padding: "15px",
+                      background: "#fff",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontWeight: "700",
+                            fontSize: "16px",
+                          }}
+                        >
+                          👤 {item.name || "Student"}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            color: "#475569",
+                            fontSize: "13px",
+                          }}
+                        >
+                          📱 {item.mobile || "Mobile नहीं मिला"}
+                          {item.email ? ` • ✉️ ${item.email}` : ""}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#64748b",
+                        }}
+                      >
+                        🕐 {formatSupportTime(item.createdAt)}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        padding: "12px",
+                        background: "#f8fafc",
+                        borderRadius: "10px",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <strong>Student की समस्या:</strong>
+                      <div style={{ marginTop: "5px" }}>
+                        {item.message || "—"}
+                      </div>
+                    </div>
+
+                    {item.adminReply && (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "12px",
+                          background: "#eff6ff",
+                          borderRadius: "10px",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        <strong>👨‍💼 आपका Reply:</strong>
+                        <div style={{ marginTop: "5px" }}>
+                          {item.adminReply}
+                        </div>
+                      </div>
+                    )}
+
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        display: "flex",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <textarea
+                        value={supportReply[item.id] || ""}
+                        onChange={(e) =>
+                          setSupportReply((prev) => ({
+                            ...prev,
+                            [item.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="Student को Reply लिखें..."
+                        rows={2}
+                        style={{
+                          flex: "1 1 280px",
+                          minWidth: "220px",
+                          resize: "vertical",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "10px",
+                          padding: "10px",
+                          fontFamily: "inherit",
+                          boxSizing: "border-box",
+                        }}
+                      />
+
+                      <button
+                        className="admin-btn primary"
+                        onClick={() => saveSupportReply(item)}
+                        disabled={supportSaving[item.id]}
+                      >
+                        {supportSaving[item.id]
+                          ? "⏳ Saving..."
+                          : "💾 Reply Save"}
+                      </button>
+
+                      <button
+                        className="admin-btn secondary"
+                        onClick={() => openStudentWhatsApp(item)}
+                      >
+                        📲 WhatsApp
+                      </button>
+
+                      <button
+                        className="admin-btn danger"
+                        onClick={() => deleteSupportMessage(item)}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
