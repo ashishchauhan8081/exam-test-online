@@ -14,11 +14,11 @@ import {
 
 import {
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
   signOut,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
 } from "firebase/auth";
 
 import {
@@ -41,8 +41,6 @@ import AdminPanel from "./components/AdminPanel";
 
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
-import ForgotPassword from "./pages/forgot-password";
-
 
 // ======================================================
 // FIREBASE
@@ -59,9 +57,6 @@ const firebaseApp = getApps().length
     });
 
 const auth = getAuth(firebaseApp);
-
-const googleProvider =
-  new GoogleAuthProvider();
 
 const db = getDatabase(firebaseApp);
 
@@ -256,63 +251,53 @@ const defaultResources = [
 // QUESTION NORMALIZER
 // ======================================================
 
-function normalizeQuestions(
-  questions
-) {
+function normalizeQuestions(questions) {
   if (!Array.isArray(questions)) {
     return [];
   }
 
-  return questions.map(
-    (q, index) => ({
-      id:
-        q?.id ??
-        index + 1,
+  return questions.map((q, index) => ({
+    id:
+      q?.id ??
+      index + 1,
 
-      question:
-        q?.question ??
-        q?.questionText ??
-        q?.text ??
-        "",
+    question:
+      q?.question ??
+      q?.questionText ??
+      q?.text ??
+      "",
 
-      options:
-        Array.isArray(
-          q?.options
-        )
-          ? [
-              q.options[0] || "",
-              q.options[1] || "",
-              q.options[2] || "",
-              q.options[3] || "",
-            ]
-          : [
-              "",
-              "",
-              "",
-              "",
-            ],
+    options:
+      Array.isArray(q?.options)
+        ? [
+            q.options[0] || "",
+            q.options[1] || "",
+            q.options[2] || "",
+            q.options[3] || "",
+          ]
+        : [
+            "",
+            "",
+            "",
+            "",
+          ],
 
-      answer:
-        q?.answer,
+    answer:
+      q?.answer,
 
-      explanation:
-        q?.explanation ??
-        "",
-    })
-  );
+    explanation:
+      q?.explanation ??
+      "",
+  }));
 }
 
 // ======================================================
 // CORRECT ANSWER INDEX
 // ======================================================
 
-function getCorrectIndex(
-  question
-) {
+function getCorrectIndex(question) {
   const options =
-    Array.isArray(
-      question?.options
-    )
+    Array.isArray(question?.options)
       ? question.options
       : [];
 
@@ -328,8 +313,7 @@ function getCorrectIndex(
   }
 
   if (
-    typeof answer ===
-      "number" &&
+    typeof answer === "number" &&
     Number.isInteger(answer)
   ) {
     if (
@@ -413,9 +397,7 @@ function getCorrectIndex(
     return exact;
   }
 
-  const compact = (
-    value
-  ) =>
+  const compact = (value) =>
     String(value ?? "")
       .replace(/\s+/g, " ")
       .trim()
@@ -431,6 +413,727 @@ function getCorrectIndex(
   return loose >= 0
     ? loose
     : -1;
+}
+
+// ======================================================
+// USER MOBILE LOGIN
+// ======================================================
+
+function PhoneLogin({
+  onSuccess,
+  onClose,
+}) {
+  const [phone, setPhone] =
+    useState("");
+
+  const [otp, setOtp] =
+    useState("");
+
+  const [confirmationResult, setConfirmationResult] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [otpSent, setOtpSent] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  // ====================================================
+  // SEND OTP
+  // ====================================================
+
+  const sendOTP =
+    async (e) => {
+      if (e) {
+        e.preventDefault();
+      }
+
+      setErrorMessage("");
+
+      const cleanPhone =
+        phone
+          .replace(/\D/g, "")
+          .trim();
+
+      if (
+        cleanPhone.length !== 10
+      ) {
+        setErrorMessage(
+          "कृपया सही 10 अंकों का Mobile Number डालें।"
+        );
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        // Remove old verifier if already present.
+        if (
+          window.recaptchaVerifier
+        ) {
+          try {
+            window.recaptchaVerifier.clear();
+          } catch (error) {
+            console.log(
+              "Old Recaptcha clear:",
+              error
+            );
+          }
+
+          window.recaptchaVerifier =
+            null;
+        }
+
+        const verifier =
+          new RecaptchaVerifier(
+            auth,
+            "recaptcha-container",
+            {
+              size: "invisible",
+              callback: () => {
+                console.log(
+                  "reCAPTCHA verified"
+                );
+              },
+              "expired-callback": () => {
+                setErrorMessage(
+                  "reCAPTCHA expire हो गया। फिर से OTP भेजें।"
+                );
+              },
+            }
+          );
+
+        window.recaptchaVerifier =
+          verifier;
+
+        const fullPhone =
+          `+91${cleanPhone}`;
+
+        const result =
+          await signInWithPhoneNumber(
+            auth,
+            fullPhone,
+            verifier
+          );
+
+        setConfirmationResult(
+          result
+        );
+
+        setOtpSent(true);
+
+        setErrorMessage("");
+
+        alert(
+          "✅ OTP आपके Mobile Number पर भेज दिया गया है।"
+        );
+      } catch (error) {
+        console.error(
+          "Phone OTP Error:",
+          error
+        );
+
+        if (
+          window.recaptchaVerifier
+        ) {
+          try {
+            window.recaptchaVerifier.clear();
+          } catch (clearError) {
+            console.log(
+              clearError
+            );
+          }
+
+          window.recaptchaVerifier =
+            null;
+        }
+
+        if (
+          error.code ===
+          "auth/invalid-phone-number"
+        ) {
+          setErrorMessage(
+            "❌ Mobile Number सही नहीं है।"
+          );
+        } else if (
+          error.code ===
+          "auth/too-many-requests"
+        ) {
+          setErrorMessage(
+            "❌ बहुत अधिक OTP requests हो गई हैं। कुछ समय बाद फिर प्रयास करें।"
+          );
+        } else if (
+          error.code ===
+          "auth/quota-exceeded"
+        ) {
+          setErrorMessage(
+            "❌ Firebase SMS quota समाप्त हो गया है।"
+          );
+        } else if (
+          error.code ===
+          "auth/captcha-check-failed"
+        ) {
+          setErrorMessage(
+            "❌ reCAPTCHA verification fail हुई।"
+          );
+        } else if (
+          error.code ===
+          "auth/operation-not-allowed"
+        ) {
+          setErrorMessage(
+            "❌ Firebase Console में Phone Authentication Enable नहीं है।"
+          );
+        } else {
+          setErrorMessage(
+            "❌ OTP भेजने में समस्या हुई:\n" +
+              error.message
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  // ====================================================
+  // VERIFY OTP
+  // ====================================================
+
+  const verifyOTP =
+    async (e) => {
+      if (e) {
+        e.preventDefault();
+      }
+
+      setErrorMessage("");
+
+      if (!confirmationResult) {
+        setErrorMessage(
+          "पहले OTP भेजें।"
+        );
+        return;
+      }
+
+      const cleanOTP =
+        otp.replace(/\D/g, "");
+
+      if (
+        cleanOTP.length !== 6
+      ) {
+        setErrorMessage(
+          "कृपया 6 अंकों का OTP डालें।"
+        );
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const result =
+          await confirmationResult.confirm(
+            cleanOTP
+          );
+
+        const loggedUser =
+          result.user;
+
+        alert(
+          "✅ Mobile Login सफल हुआ।"
+        );
+
+        if (onSuccess) {
+          onSuccess(
+            loggedUser
+          );
+        }
+      } catch (error) {
+        console.error(
+          "OTP Verify Error:",
+          error
+        );
+
+        if (
+          error.code ===
+          "auth/invalid-verification-code"
+        ) {
+          setErrorMessage(
+            "❌ OTP गलत है।"
+          );
+        } else if (
+          error.code ===
+          "auth/code-expired"
+        ) {
+          setErrorMessage(
+            "❌ OTP expire हो गया है। नया OTP भेजें।"
+          );
+        } else {
+          setErrorMessage(
+            "❌ OTP verification failed:\n" +
+              error.message
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  // ====================================================
+  // BACK TO MOBILE
+  // ====================================================
+
+  const changeNumber =
+    () => {
+      setOtpSent(false);
+      setOtp("");
+      setConfirmationResult(
+        null
+      );
+      setErrorMessage("");
+
+      if (
+        window.recaptchaVerifier
+      ) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (error) {
+          console.log(
+            error
+          );
+        }
+
+        window.recaptchaVerifier =
+          null;
+      }
+    };
+
+  // ====================================================
+  // CLEANUP
+  // ====================================================
+
+  useEffect(() => {
+    return () => {
+      if (
+        window.recaptchaVerifier
+      ) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (error) {
+          console.log(
+            error
+          );
+        }
+
+        window.recaptchaVerifier =
+          null;
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        minHeight:
+          "100vh",
+        display: "flex",
+        alignItems:
+          "center",
+        justifyContent:
+          "center",
+        padding: "20px",
+        background:
+          "linear-gradient(135deg,#eef6ff,#ffffff,#f3e8ff)",
+        fontFamily:
+          "Arial, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "430px",
+          background: "#fff",
+          borderRadius: "20px",
+          padding: "30px",
+          boxShadow:
+            "0 15px 45px rgba(0,0,0,.15)",
+          boxSizing:
+            "border-box",
+        }}
+      >
+        {/* HEADER */}
+
+        <div
+          style={{
+            textAlign: "center",
+            marginBottom: "25px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "55px",
+            }}
+          >
+            📱
+          </div>
+
+          <h1
+            style={{
+              margin:
+                "10px 0",
+              color:
+                "#1d4ed8",
+            }}
+          >
+            User Login
+          </h1>
+
+          <p
+            style={{
+              color:
+                "#64748b",
+              margin:
+                "8px 0",
+            }}
+          >
+            Mobile Number से Login करें
+          </p>
+        </div>
+
+        {/* ERROR */}
+
+        {errorMessage && (
+          <div
+            style={{
+              background:
+                "#fee2e2",
+              color:
+                "#991b1b",
+              border:
+                "1px solid #fecaca",
+              padding:
+                "12px",
+              borderRadius:
+                "10px",
+              marginBottom:
+                "15px",
+              whiteSpace:
+                "pre-wrap",
+              fontSize:
+                "14px",
+              lineHeight:
+                "1.5",
+            }}
+          >
+            {errorMessage}
+          </div>
+        )}
+
+        {!otpSent ? (
+          <form
+            onSubmit={sendOTP}
+          >
+            <label
+              style={{
+                display:
+                  "block",
+                fontWeight:
+                  "700",
+                marginBottom:
+                  "8px",
+              }}
+            >
+              📱 Mobile Number
+            </label>
+
+            <div
+              style={{
+                display:
+                  "flex",
+                alignItems:
+                  "center",
+                border:
+                  "1px solid #cbd5e1",
+                borderRadius:
+                  "10px",
+                overflow:
+                  "hidden",
+                marginBottom:
+                  "18px",
+              }}
+            >
+              <div
+                style={{
+                  padding:
+                    "13px 10px",
+                  background:
+                    "#f1f5f9",
+                  fontWeight:
+                    "700",
+                  color:
+                    "#334155",
+                }}
+              >
+                +91
+              </div>
+
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={phone}
+                onChange={(e) =>
+                  setPhone(
+                    e.target.value
+                      .replace(
+                        /\D/g,
+                        ""
+                      )
+                      .slice(
+                        0,
+                        10
+                      )
+                  )
+                }
+                placeholder="10 digit mobile number"
+                style={{
+                  flex: 1,
+                  padding:
+                    "13px",
+                  border:
+                    "none",
+                  outline:
+                    "none",
+                  fontSize:
+                    "16px",
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={
+                loading
+              }
+              style={{
+                width:
+                  "100%",
+                padding:
+                  "14px",
+                border:
+                  "none",
+                borderRadius:
+                  "10px",
+                background:
+                  loading
+                    ? "#94a3b8"
+                    : "#1d4ed8",
+                color:
+                  "#fff",
+                fontSize:
+                  "17px",
+                fontWeight:
+                  "700",
+                cursor:
+                  loading
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {loading
+                ? "⏳ OTP भेजा जा रहा है..."
+                : "📲 OTP भेजें"}
+            </button>
+          </form>
+        ) : (
+          <form
+            onSubmit={verifyOTP}
+          >
+            <div
+              style={{
+                background:
+                  "#eff6ff",
+                border:
+                  "1px solid #bfdbfe",
+                padding:
+                  "12px",
+                borderRadius:
+                  "10px",
+                marginBottom:
+                  "18px",
+                textAlign:
+                  "center",
+                color:
+                  "#1e40af",
+              }}
+            >
+              <strong>
+                +91 {phone}
+              </strong>
+              <br />
+              पर OTP भेजा गया है।
+            </div>
+
+            <label
+              style={{
+                display:
+                  "block",
+                fontWeight:
+                  "700",
+                marginBottom:
+                  "8px",
+              }}
+            >
+              🔐 OTP डालें
+            </label>
+
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={6}
+              value={otp}
+              onChange={(e) =>
+                setOtp(
+                  e.target.value
+                    .replace(
+                      /\D/g,
+                      ""
+                    )
+                    .slice(
+                      0,
+                      6
+                    )
+                )
+              }
+              placeholder="6 digit OTP"
+              autoFocus
+              style={{
+                width:
+                  "100%",
+                padding:
+                  "14px",
+                border:
+                  "1px solid #cbd5e1",
+                borderRadius:
+                  "10px",
+                fontSize:
+                  "20px",
+                letterSpacing:
+                  "5px",
+                textAlign:
+                  "center",
+                boxSizing:
+                  "border-box",
+                marginBottom:
+                  "18px",
+              }}
+            />
+
+            <button
+              type="submit"
+              disabled={
+                loading
+              }
+              style={{
+                width:
+                  "100%",
+                padding:
+                  "14px",
+                border:
+                  "none",
+                borderRadius:
+                  "10px",
+                background:
+                  loading
+                    ? "#94a3b8"
+                    : "#16a34a",
+                color:
+                  "#fff",
+                fontSize:
+                  "17px",
+                fontWeight:
+                  "700",
+                cursor:
+                  loading
+                    ? "not-allowed"
+                    : "pointer",
+              }}
+            >
+              {loading
+                ? "⏳ Verify हो रहा है..."
+                : "✅ OTP Verify करके Login"}
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                changeNumber
+              }
+              style={{
+                width:
+                  "100%",
+                marginTop:
+                  "12px",
+                padding:
+                  "12px",
+                border:
+                  "1px solid #cbd5e1",
+                borderRadius:
+                  "10px",
+                background:
+                  "#fff",
+                color:
+                  "#334155",
+                fontSize:
+                  "15px",
+                fontWeight:
+                  "700",
+                cursor:
+                  "pointer",
+              }}
+            >
+              ← Mobile Number बदलें
+            </button>
+          </form>
+        )}
+
+        {/* RECAPTCHA */}
+
+        <div
+          id="recaptcha-container"
+        />
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width:
+              "100%",
+            marginTop:
+              "12px",
+            padding:
+              "12px",
+            border:
+              "none",
+            borderRadius:
+              "10px",
+            background:
+              "#e2e8f0",
+            color:
+              "#334155",
+            fontSize:
+              "16px",
+            fontWeight:
+              "700",
+            cursor:
+              "pointer",
+          }}
+        >
+          ← Website पर वापस जाएँ
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ======================================================
@@ -526,6 +1229,20 @@ function AdminLogin({
           alert(
             "❌ Admin Password गलत है।"
           );
+        } else if (
+          error.code ===
+          "auth/invalid-email"
+        ) {
+          alert(
+            "❌ Admin Email सही नहीं है।"
+          );
+        } else if (
+          error.code ===
+          "auth/too-many-requests"
+        ) {
+          alert(
+            "❌ बहुत अधिक login attempts हो गए हैं। कुछ समय बाद फिर प्रयास करें।"
+          );
         } else {
           alert(
             "❌ Admin Login Error:\n" +
@@ -563,6 +1280,8 @@ function AdminLogin({
           padding: "30px",
           boxShadow:
             "0 15px 45px rgba(0,0,0,.15)",
+          boxSizing:
+            "border-box",
         }}
       >
         <div
@@ -596,8 +1315,7 @@ function AdminLogin({
                 "#64748b",
             }}
           >
-            Exam Test
-            Admin Panel
+            Exam Test Admin Panel
           </p>
         </div>
 
@@ -693,14 +1411,18 @@ function AdminLogin({
               borderRadius:
                 "10px",
               background:
-                "#1d4ed8",
+                loading
+                  ? "#94a3b8"
+                  : "#1d4ed8",
               color: "#fff",
               fontSize:
                 "17px",
               fontWeight:
                 "700",
               cursor:
-                "pointer",
+                loading
+                  ? "not-allowed"
+                  : "pointer",
             }}
           >
             {loading
@@ -1616,7 +2338,7 @@ export default function App() {
   const [adminLoginOpen, setAdminLoginOpen] =
     useState(false);
 
-  const [forgotPasswordOpen, setForgotPasswordOpen] =
+  const [phoneLoginOpen, setPhoneLoginOpen] =
     useState(false);
 
   // ====================================================
@@ -1766,41 +2488,16 @@ export default function App() {
     }, [cloudTests]);
 
   // ====================================================
-  // GOOGLE LOGIN
+  // USER LOGIN - OPEN PHONE LOGIN
   // ====================================================
 
   const login =
     async () => {
-      try {
-        const result =
-          await signInWithPopup(
-            auth,
-            googleProvider
-          );
+      setPhoneLoginOpen(
+        true
+      );
 
-        return result.user;
-      } catch (error) {
-        console.error(
-          "Google Login Error:",
-          error
-        );
-
-        if (
-          error.code ===
-          "auth/requests-from-referer-are-blocked"
-        ) {
-          alert(
-            "❌ Google Login blocked है। Firebase Console में इस website domain को Authorized Domains में add करें।"
-          );
-        } else {
-          alert(
-            "Login नहीं हुआ:\n" +
-              error.message
-          );
-        }
-
-        return null;
-      }
+      return null;
     };
 
   // ====================================================
@@ -1820,11 +2517,19 @@ export default function App() {
           false
         );
 
-        setForgotPasswordOpen(
+        setPhoneLoginOpen(
           false
         );
 
         setPage("home");
+
+        setSelectedExam(
+          null
+        );
+
+        setSelectedTest(
+          null
+        );
       } catch (error) {
         console.error(
           error
@@ -1876,6 +2581,21 @@ export default function App() {
     };
 
   // ====================================================
+  // PHONE LOGIN SUCCESS
+  // ====================================================
+
+  const handlePhoneLoginSuccess =
+    (loggedUser) => {
+      setUser(
+        loggedUser
+      );
+
+      setPhoneLoginOpen(
+        false
+      );
+    };
+
+  // ====================================================
   // HOME
   // ====================================================
 
@@ -1899,7 +2619,7 @@ export default function App() {
         false
       );
 
-      setForgotPasswordOpen(
+      setPhoneLoginOpen(
         false
       );
 
@@ -1939,24 +2659,25 @@ export default function App() {
 
   const openTest =
     async (test) => {
-      // Test object must come from the public Firebase test list.
       if (!test) {
-        alert("❌ Test उपलब्ध नहीं है।");
+        alert(
+          "❌ Test उपलब्ध नहीं है।"
+        );
         return;
       }
 
-      // Login is required by the existing TestRunner flow.
       if (!user) {
-        const loggedInUser =
-          await login();
+        setPhoneLoginOpen(
+          true
+        );
 
-        if (!loggedInUser) {
-          return;
-        }
+        return;
       }
 
-      // Open the exact Firebase test object in TestRunner.
-      setSelectedTest(test);
+      setSelectedTest(
+        test
+      );
+
       setPage("test");
 
       window.scrollTo({
@@ -1997,6 +2718,27 @@ export default function App() {
   }
 
   // ====================================================
+  // USER PHONE LOGIN
+  // ====================================================
+
+  if (
+    phoneLoginOpen
+  ) {
+    return (
+      <PhoneLogin
+        onSuccess={
+          handlePhoneLoginSuccess
+        }
+        onClose={() =>
+          setPhoneLoginOpen(
+            false
+          )
+        }
+      />
+    );
+  }
+
+  // ====================================================
   // ADMIN LOGIN
   // ====================================================
 
@@ -2013,30 +2755,6 @@ export default function App() {
             false
           )
         }
-      />
-    );
-  }
-
-  // ====================================================
-  // FORGOT PASSWORD
-  // ====================================================
-
-  if (forgotPasswordOpen) {
-    return (
-      <ForgotPassword
-        onBack={() => {
-          setForgotPasswordOpen(false);
-          setPage("home");
-          window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-          });
-        }}
-        onLogin={() => {
-          setForgotPasswordOpen(false);
-          setPage("home");
-          login();
-        }}
       />
     );
   }
@@ -2083,14 +2801,17 @@ export default function App() {
               </h2>
 
               <p>
-                कृपया पहले Login करें।
+                कृपया पहले Mobile Number
+                से Login करें।
               </p>
 
               <button
                 className="open-btn"
-                onClick={login}
+                onClick={
+                  login
+                }
               >
-                🔐 Login करें
+                📱 Mobile Login करें
               </button>
 
               <button
@@ -2215,22 +2936,7 @@ export default function App() {
                 👑 Admin Panel
               </button>
 
-              {/* FORGOT PASSWORD */}
-
-              <button
-                className="login-btn"
-                onClick={() => {
-                  setForgotPasswordOpen(true);
-                  window.scrollTo({
-                    top: 0,
-                    behavior: "smooth",
-                  });
-                }}
-              >
-                🔑 Forgot Password
-              </button>
-
-              {/* LOGIN */}
+              {/* USER LOGIN */}
 
               {user ? (
                 <button
@@ -2239,7 +2945,9 @@ export default function App() {
                     logout
                   }
                   title={
-                    user.email
+                    user.phoneNumber ||
+                    user.email ||
+                    ""
                   }
                 >
                   👤 Logout
@@ -2251,7 +2959,7 @@ export default function App() {
                     login
                   }
                 >
-                  🔐 Login
+                  📱 Mobile Login
                 </button>
               )}
 
