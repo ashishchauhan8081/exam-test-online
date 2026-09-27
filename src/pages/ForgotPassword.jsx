@@ -1,14 +1,9 @@
-// ======================================================
-// FORGOT PASSWORD
-// Exam Test
-// Mobile Number + Admin OTP + New Password
-// ======================================================
-
 import React, { useEffect, useState } from "react";
 import "../App.css";
 
 // ======================================================
-// API URL
+// EXAM TEST - FORGOT PASSWORD
+// Mobile Number + OTP + New Password
 // ======================================================
 
 const API_URL = "/api/forgot-password";
@@ -31,13 +26,9 @@ export default function ForgotPassword({
   onBack,
   onLogin,
 }) {
-  // ----------------------------------------------------
-  // STATES
-  // ----------------------------------------------------
+  const [step, setStep] = useState("mobile");
 
   const [mobile, setMobile] = useState("");
-
-  const [step, setStep] = useState("mobile");
 
   const [requestId, setRequestId] = useState("");
 
@@ -49,12 +40,6 @@ export default function ForgotPassword({
   const [confirmPassword, setConfirmPassword] =
     useState("");
 
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
-
   const [loading, setLoading] =
     useState(false);
 
@@ -65,7 +50,7 @@ export default function ForgotPassword({
     useState("");
 
   // ====================================================
-  // CLEAR MESSAGES
+  // CLEAR MESSAGE
   // ====================================================
 
   const clearMessages = () => {
@@ -74,18 +59,7 @@ export default function ForgotPassword({
   };
 
   // ====================================================
-  // BACK TO LOGIN
-  // ====================================================
-
-  const handleBack = () => {
-    if (onBack) {
-      onBack();
-    }
-  };
-
-  // ====================================================
-  // STEP 1
-  // REQUEST PASSWORD RESET
+  // REQUEST OTP
   // ====================================================
 
   const requestReset = async () => {
@@ -93,10 +67,9 @@ export default function ForgotPassword({
 
     const clean = cleanMobile(mobile);
 
-    // Mobile validation
     if (!/^[6-9]\d{9}$/.test(clean)) {
       setError(
-        "❌ कृपया 6 से शुरू होने वाला सही 10 अंकों का Mobile Number डालें।"
+        "कृपया सही 10 अंकों का Mobile Number डालें।"
       );
       return;
     }
@@ -104,25 +77,20 @@ export default function ForgotPassword({
     try {
       setLoading(true);
 
-      const response = await fetch(
-        API_URL,
-        {
-          method: "POST",
+      const response = await fetch(API_URL, {
+        method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            action: "request",
-            mobile: clean,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          action: "request",
+          mobile: clean,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
@@ -131,23 +99,24 @@ export default function ForgotPassword({
         );
       }
 
-      // Save request ID
-      setRequestId(
-        data.requestId || ""
-      );
+      if (!data.requestId) {
+        throw new Error(
+          "Server ने Request ID नहीं भेजी।"
+        );
+      }
 
-      // Save mobile
       setMobile(clean);
 
-      // Go OTP screen
+      setRequestId(data.requestId);
+
       setStep("otp");
 
       setMessage(
-        "✅ Password reset request Admin Panel में भेज दी गई है। Admin OTP generate करके WhatsApp पर भेजेगा।"
+        "✅ Reset request सफलतापूर्वक भेज दी गई है। Admin OTP generate करके WhatsApp पर भेजेगा।"
       );
     } catch (err) {
       console.error(
-        "Password reset request error:",
+        "Forgot Password Request Error:",
         err
       );
 
@@ -161,39 +130,6 @@ export default function ForgotPassword({
   };
 
   // ====================================================
-  // STEP 2
-  // OTP VALIDATION
-  //
-  // Server final password reset के समय OTP verify
-  // करेगा। यहाँ केवल OTP format check किया जाता है।
-  // ====================================================
-
-  const continueToPassword = () => {
-    clearMessages();
-
-    if (!requestId) {
-      setError(
-        "❌ Reset request नहीं मिली। कृपया दोबारा request करें।"
-      );
-      return;
-    }
-
-    if (!/^\d{6}$/.test(otp)) {
-      setError(
-        "❌ कृपया 6 अंकों का OTP डालें।"
-      );
-      return;
-    }
-
-    setStep("password");
-
-    setMessage(
-      "✅ OTP दर्ज हो गया। नया Password बनाइए। OTP की अंतिम पुष्टि Password Save करते समय server पर होगी।"
-    );
-  };
-
-  // ====================================================
-  // STEP 3
   // RESET PASSWORD
   // ====================================================
 
@@ -202,22 +138,21 @@ export default function ForgotPassword({
 
     if (!requestId) {
       setError(
-        "❌ Reset request नहीं मिली।"
+        "❌ Reset Request ID नहीं मिली।"
       );
       return;
     }
 
     if (!/^\d{6}$/.test(otp)) {
       setError(
-        "❌ कृपया सही 6 अंकों का OTP डालें।"
+        "कृपया 6 अंकों का OTP डालें।"
       );
-      setStep("otp");
       return;
     }
 
     if (newPassword.length < 6) {
       setError(
-        "❌ Password कम से कम 6 characters का होना चाहिए।"
+        "Password कम से कम 6 characters का होना चाहिए।"
       );
       return;
     }
@@ -232,34 +167,25 @@ export default function ForgotPassword({
     try {
       setLoading(true);
 
-      const response = await fetch(
-        API_URL,
-        {
-          method: "POST",
+      const response = await fetch(API_URL, {
+        method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            action:
-              "resetPassword",
+        body: JSON.stringify({
+          action: "resetPassword",
 
-            requestId:
-              requestId,
+          requestId: requestId,
 
-            otp:
-              otp,
+          otp: otp,
 
-            newPassword:
-              newPassword,
-          }),
-        }
-      );
+          newPassword: newPassword,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
@@ -268,25 +194,26 @@ export default function ForgotPassword({
         );
       }
 
-      // Clear sensitive values
-      setOtp("");
-      setNewPassword("");
-      setConfirmPassword("");
-
       setStep("done");
+
+      setOtp("");
+
+      setNewPassword("");
+
+      setConfirmPassword("");
 
       setMessage(
         "✅ Password successfully change हो गया। अब नए Password से Login करें।"
       );
     } catch (err) {
       console.error(
-        "Password reset error:",
+        "Reset Password Error:",
         err
       );
 
       setError(
         err?.message ||
-          "❌ Password reset करते समय समस्या हुई।"
+          "❌ Password reset करने में समस्या हुई।"
       );
     } finally {
       setLoading(false);
@@ -294,28 +221,28 @@ export default function ForgotPassword({
   };
 
   // ====================================================
-  // CHANGE MOBILE
+  // BACK TO LOGIN
   // ====================================================
 
-  const changeMobile = () => {
-    clearMessages();
-
-    setRequestId("");
-    setOtp("");
-    setNewPassword("");
-    setConfirmPassword("");
-
-    setStep("mobile");
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    }
   };
 
   // ====================================================
-  // GO OTP
+  // GO LOGIN
   // ====================================================
 
-  const goToOtp = () => {
-    clearMessages();
+  const handleLogin = () => {
+    if (onLogin) {
+      onLogin();
+      return;
+    }
 
-    setStep("otp");
+    if (onBack) {
+      onBack();
+    }
   };
 
   // ====================================================
@@ -326,40 +253,29 @@ export default function ForgotPassword({
     <div
       style={{
         minHeight: "100vh",
-
         display: "flex",
-
         alignItems: "center",
-
         justifyContent: "center",
-
         padding: "20px",
-
-        background:
-          "linear-gradient(135deg,#eef2ff,#ffffff)",
-
         boxSizing: "border-box",
+        background:
+          "linear-gradient(135deg,#eef6ff,#f8fbff)",
       }}
     >
       <div
         style={{
           width: "100%",
-
-          maxWidth: "430px",
-
+          maxWidth: "450px",
           background: "#ffffff",
-
           borderRadius: "24px",
-
-          padding: "28px",
-
-          boxShadow:
-            "0 10px 35px rgba(0,0,0,0.12)",
-
+          padding: "30px",
           boxSizing: "border-box",
+          boxShadow:
+            "0 15px 45px rgba(15,23,42,0.12)",
+          border:
+            "1px solid #e2e8f0",
         }}
       >
-
         {/* ==================================================
             HEADER
         ================================================== */}
@@ -367,55 +283,42 @@ export default function ForgotPassword({
         <div
           style={{
             textAlign: "center",
-
             marginBottom: "25px",
           }}
         >
           <div
             style={{
-              width: "80px",
-
-              height: "80px",
-
-              margin: "0 auto 12px",
-
-              borderRadius: "22px",
-
+              width: "82px",
+              height: "82px",
+              margin: "0 auto 14px",
+              borderRadius: "24px",
               background: "#eff6ff",
-
               display: "flex",
-
               alignItems: "center",
-
               justifyContent: "center",
-
-              fontSize: "45px",
+              fontSize: "44px",
             }}
           >
             🔑
           </div>
 
-          <h1
+          <h2
             style={{
-              margin: "8px 0",
-
-              color: "#111827",
-
+              margin: "5px 0 8px",
+              color: "#0f172a",
               fontSize: "30px",
-
               fontWeight: "800",
             }}
           >
             Forgot Password
-          </h1>
+          </h2>
 
           <p
             style={{
-              color: "#64748b",
-
               margin: 0,
-
+              color: "#64748b",
               fontSize: "16px",
+              lineHeight: 1.5,
             }}
           >
             Mobile Number से Password Reset करें
@@ -429,22 +332,15 @@ export default function ForgotPassword({
         {message && (
           <div
             style={{
-              padding: "13px",
-
-              marginBottom: "15px",
-
+              padding: "13px 14px",
+              marginBottom: "18px",
               background: "#ecfdf5",
-
               color: "#047857",
-
               border:
                 "1px solid #a7f3d0",
-
-              borderRadius: "10px",
-
+              borderRadius: "12px",
               fontSize: "14px",
-
-              lineHeight: 1.5,
+              lineHeight: 1.6,
             }}
           >
             {message}
@@ -458,22 +354,15 @@ export default function ForgotPassword({
         {error && (
           <div
             style={{
-              padding: "13px",
-
-              marginBottom: "15px",
-
+              padding: "13px 14px",
+              marginBottom: "18px",
               background: "#fef2f2",
-
               color: "#dc2626",
-
               border:
                 "1px solid #fecaca",
-
-              borderRadius: "10px",
-
+              borderRadius: "12px",
               fontSize: "14px",
-
-              lineHeight: 1.5,
+              lineHeight: 1.6,
             }}
           >
             {error}
@@ -481,8 +370,7 @@ export default function ForgotPassword({
         )}
 
         {/* ==================================================
-            STEP 1
-            MOBILE NUMBER
+            STEP 1 - MOBILE
         ================================================== */}
 
         {step === "mobile" && (
@@ -490,127 +378,90 @@ export default function ForgotPassword({
             <label
               style={{
                 display: "block",
-
+                marginBottom: "8px",
+                color: "#1e293b",
                 fontWeight: "700",
-
-                color: "#1f2937",
-
-                marginBottom: "7px",
+                fontSize: "15px",
               }}
             >
-              📱 Mobile Number
+              📱 Registered Mobile Number
             </label>
 
             <input
               type="tel"
-
               inputMode="numeric"
-
               autoComplete="tel"
-
               maxLength={10}
-
               value={mobile}
-
               onChange={(e) => {
                 setMobile(
-                  cleanMobile(
-                    e.target.value
-                  )
+                  cleanMobile(e.target.value)
                 );
 
                 setError("");
+                setMessage("");
               }}
-
-              placeholder="10 अंकों का Mobile Number"
-
+              placeholder="10 digit mobile number"
               style={{
                 width: "100%",
-
-                boxSizing: "border-box",
-
                 padding: "15px",
-
-                marginBottom: "18px",
-
+                boxSizing: "border-box",
                 border:
-                  "1px solid #d1d5db",
-
-                borderRadius: "11px",
-
+                  "1px solid #cbd5e1",
+                borderRadius: "12px",
                 fontSize: "17px",
-
                 outline: "none",
+                marginBottom: "18px",
               }}
             />
 
             <button
               type="button"
-
               onClick={requestReset}
-
               disabled={loading}
-
               style={{
                 width: "100%",
-
                 padding: "15px",
-
-                border: 0,
-
-                borderRadius: "11px",
-
+                border: "none",
+                borderRadius: "12px",
                 background: loading
                   ? "#93c5fd"
                   : "#2563eb",
-
-                color: "#fff",
-
+                color: "#ffffff",
                 fontSize: "16px",
-
-                fontWeight: "700",
-
+                fontWeight: "800",
                 cursor: loading
                   ? "not-allowed"
                   : "pointer",
               }}
             >
               {loading
-                ? "⏳ Request भेजी जा रही है..."
-                : "📱 Password Reset Request"}
+                ? "Request भेजी जा रही है..."
+                : "📱 Password Reset Request भेजें"}
             </button>
 
             <div
               style={{
-                marginTop: "15px",
-
+                marginTop: "16px",
                 padding: "13px",
-
                 background: "#fff7ed",
-
                 border:
                   "1px solid #fed7aa",
-
-                borderRadius: "10px",
-
+                borderRadius: "12px",
                 color: "#9a3412",
-
                 fontSize: "13px",
-
-                lineHeight: 1.5,
+                lineHeight: 1.6,
               }}
             >
               🔐 Mobile Number डालने के बाद
-              Admin Panel में Reset Request जाएगी।
-              Admin OTP generate करेगा और WhatsApp
-              पर भेजेगा।
+              Admin Panel से OTP generate किया जाएगा
+              और OTP WhatsApp पर भेजा जाएगा।
             </div>
           </>
         )}
 
         {/* ==================================================
-            STEP 2
-            OTP
+            STEP 2 - OTP + NEW PASSWORD
         ================================================== */}
 
         {step === "otp" && (
@@ -618,101 +469,96 @@ export default function ForgotPassword({
             <div
               style={{
                 textAlign: "center",
-
-                padding:
-                  "5px 0 20px",
+                marginBottom: "22px",
               }}
             >
               <div
                 style={{
                   fontSize: "48px",
+                  marginBottom: "5px",
                 }}
               >
                 📲
               </div>
 
-              <h2
+              <h3
                 style={{
-                  margin: "8px 0",
-
-                  color: "#111827",
-
-                  fontSize: "23px",
+                  margin: "5px 0 8px",
+                  color: "#0f172a",
+                  fontSize: "22px",
                 }}
               >
                 OTP Verification
-              </h2>
+              </h3>
 
               <p
                 style={{
+                  margin: 0,
                   color: "#64748b",
-
+                  fontSize: "14px",
                   lineHeight: 1.6,
-
-                  marginBottom: "8px",
                 }}
               >
-                Admin द्वारा WhatsApp पर भेजा गया
-                6 digit OTP यहाँ डालें।
+                आपके registered Mobile Number
+                पर Admin द्वारा OTP भेजा जाएगा।
               </p>
 
               <p
                 style={{
+                  margin:
+                    "10px 0 0",
                   color: "#2563eb",
-
                   fontWeight: "700",
-
-                  margin: 0,
+                  fontSize: "15px",
                 }}
               >
-                📱 {mobile}
+                📱 +91 {mobile}
               </p>
             </div>
 
-            {/* Request ID */}
+            {/* REQUEST ID */}
 
             <div
               style={{
                 padding: "10px",
-
-                marginBottom: "16px",
-
+                marginBottom: "18px",
                 background: "#f8fafc",
-
                 border:
                   "1px solid #e2e8f0",
-
-                borderRadius: "9px",
-
-                fontSize: "12px",
-
-                color: "#64748b",
-
-                wordBreak: "break-all",
-
+                borderRadius: "10px",
                 textAlign: "center",
               }}
             >
-              Request ID:
-              <br />
-              <strong
+              <div
                 style={{
-                  color: "#475569",
+                  fontSize: "11px",
+                  color: "#64748b",
+                  marginBottom: "3px",
+                }}
+              >
+                Request ID
+              </div>
+
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#334155",
+                  wordBreak:
+                    "break-all",
                 }}
               >
                 {requestId}
-              </strong>
+              </div>
             </div>
+
+            {/* OTP */}
 
             <label
               style={{
                 display: "block",
-
+                marginBottom: "8px",
+                color: "#1e293b",
                 fontWeight: "700",
-
-                color: "#1f2937",
-
-                marginBottom: "7px",
               }}
             >
               🔐 6 Digit OTP
@@ -720,15 +566,10 @@ export default function ForgotPassword({
 
             <input
               type="tel"
-
               inputMode="numeric"
-
               autoComplete="one-time-code"
-
               maxLength={6}
-
               value={otp}
-
               onChange={(e) => {
                 setOtp(
                   e.target.value
@@ -738,623 +579,260 @@ export default function ForgotPassword({
 
                 setError("");
               }}
-
-              placeholder="••••••"
-
+              placeholder="______"
               style={{
                 width: "100%",
-
-                boxSizing: "border-box",
-
                 padding: "15px",
-
-                marginBottom: "15px",
-
+                boxSizing: "border-box",
                 border:
-                  "1px solid #d1d5db",
-
-                borderRadius: "11px",
-
-                fontSize: "25px",
-
+                  "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "24px",
                 textAlign: "center",
-
                 letterSpacing: "8px",
-
                 outline: "none",
+                marginBottom: "18px",
               }}
             />
-
-            <button
-              type="button"
-
-              onClick={continueToPassword}
-
-              disabled={
-                otp.length !== 6
-              }
-
-              style={{
-                width: "100%",
-
-                padding: "15px",
-
-                border: 0,
-
-                borderRadius: "11px",
-
-                background:
-                  otp.length === 6
-                    ? "#16a34a"
-                    : "#94a3b8",
-
-                color: "#fff",
-
-                fontSize: "16px",
-
-                fontWeight: "700",
-
-                cursor:
-                  otp.length === 6
-                    ? "pointer"
-                    : "not-allowed",
-              }}
-            >
-              ✅ OTP आगे बढ़ाएँ
-            </button>
-
-            <button
-              type="button"
-
-              onClick={changeMobile}
-
-              style={{
-                width: "100%",
-
-                marginTop: "12px",
-
-                padding: "12px",
-
-                border:
-                  "1px solid #d1d5db",
-
-                borderRadius: "10px",
-
-                background: "#fff",
-
-                color: "#475569",
-
-                fontWeight: "600",
-              }}
-            >
-              ← Mobile Number बदलें
-            </button>
-          </>
-        )}
-
-        {/* ==================================================
-            STEP 3
-            NEW PASSWORD
-        ================================================== */}
-
-        {step === "password" && (
-          <>
-            <div
-              style={{
-                textAlign: "center",
-
-                marginBottom: "20px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "45px",
-                }}
-              >
-                🔐
-              </div>
-
-              <h2
-                style={{
-                  margin: "5px 0",
-
-                  color: "#111827",
-
-                  fontSize: "23px",
-                }}
-              >
-                नया Password बनाएं
-              </h2>
-
-              <p
-                style={{
-                  color: "#64748b",
-
-                  fontSize: "14px",
-
-                  marginBottom: 0,
-                }}
-              >
-                OTP दर्ज हो चुका है।
-                अब नया Password बनाएं।
-              </p>
-            </div>
-
-            {/* OTP DISPLAY */}
-
-            <div
-              style={{
-                padding: "10px",
-
-                marginBottom: "16px",
-
-                background: "#f0fdf4",
-
-                border:
-                  "1px solid #bbf7d0",
-
-                borderRadius: "9px",
-
-                textAlign: "center",
-
-                color: "#166534",
-
-                fontSize: "13px",
-              }}
-            >
-              📱 Mobile:{" "}
-              <strong>
-                {mobile}
-              </strong>
-
-              <br />
-
-              🔐 OTP:{" "}
-              <strong>
-                {otp}
-              </strong>
-            </div>
 
             {/* NEW PASSWORD */}
 
             <label
               style={{
                 display: "block",
-
+                marginBottom: "8px",
+                color: "#1e293b",
                 fontWeight: "700",
-
-                color: "#1f2937",
-
-                marginBottom: "7px",
               }}
             >
               🔑 New Password
             </label>
 
-            <div
-              style={{
-                position: "relative",
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(
+                  e.target.value
+                );
 
-                width: "100%",
-
-                marginBottom: "15px",
+                setError("");
               }}
-            >
-              <input
-                type={
-                  showPassword
-                    ? "text"
-                    : "password"
-                }
-
-                autoComplete="new-password"
-
-                value={newPassword}
-
-                onChange={(e) => {
-                  setNewPassword(
-                    e.target.value
-                  );
-
-                  setError("");
-                }}
-
-                placeholder="कम से कम 6 characters"
-
-                style={{
-                  width: "100%",
-
-                  boxSizing: "border-box",
-
-                  padding: "15px 50px 15px 15px",
-
-                  border:
-                    "1px solid #d1d5db",
-
-                  borderRadius: "11px",
-
-                  fontSize: "16px",
-
-                  outline: "none",
-                }}
-              />
-
-              <button
-                type="button"
-
-                onClick={() =>
-                  setShowPassword(
-                    !showPassword
-                  )
-                }
-
-                style={{
-                  position:
-                    "absolute",
-
-                  right: "10px",
-
-                  top: "50%",
-
-                  transform:
-                    "translateY(-50%)",
-
-                  border: "none",
-
-                  background:
-                    "transparent",
-
-                  fontSize: "20px",
-
-                  cursor: "pointer",
-                }}
-              >
-                {showPassword
-                  ? "🙈"
-                  : "👁️"}
-              </button>
-            </div>
+              placeholder="कम से कम 6 characters"
+              style={{
+                width: "100%",
+                padding: "15px",
+                boxSizing: "border-box",
+                border:
+                  "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "16px",
+                outline: "none",
+                marginBottom: "16px",
+              }}
+            />
 
             {/* CONFIRM PASSWORD */}
 
             <label
               style={{
                 display: "block",
-
+                marginBottom: "8px",
+                color: "#1e293b",
                 fontWeight: "700",
-
-                color: "#1f2937",
-
-                marginBottom: "7px",
               }}
             >
-              🔐 Confirm Password
+              🔑 Confirm Password
             </label>
 
-            <div
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => {
+                setConfirmPassword(
+                  e.target.value
+                );
+
+                setError("");
+              }}
+              placeholder="Password दोबारा डालें"
               style={{
-                position: "relative",
-
                 width: "100%",
-
+                padding: "15px",
+                boxSizing: "border-box",
+                border:
+                  "1px solid #cbd5e1",
+                borderRadius: "12px",
+                fontSize: "16px",
+                outline: "none",
                 marginBottom: "18px",
               }}
-            >
-              <input
-                type={
-                  showConfirmPassword
-                    ? "text"
-                    : "password"
-                }
-
-                autoComplete="new-password"
-
-                value={confirmPassword}
-
-                onChange={(e) => {
-                  setConfirmPassword(
-                    e.target.value
-                  );
-
-                  setError("");
-                }}
-
-                placeholder="Password दोबारा डालें"
-
-                style={{
-                  width: "100%",
-
-                  boxSizing: "border-box",
-
-                  padding: "15px 50px 15px 15px",
-
-                  border:
-                    "1px solid #d1d5db",
-
-                  borderRadius: "11px",
-
-                  fontSize: "16px",
-
-                  outline: "none",
-                }}
-              />
-
-              <button
-                type="button"
-
-                onClick={() =>
-                  setShowConfirmPassword(
-                    !showConfirmPassword
-                  )
-                }
-
-                style={{
-                  position:
-                    "absolute",
-
-                  right: "10px",
-
-                  top: "50%",
-
-                  transform:
-                    "translateY(-50%)",
-
-                  border: "none",
-
-                  background:
-                    "transparent",
-
-                  fontSize: "20px",
-
-                  cursor: "pointer",
-                }}
-              >
-                {showConfirmPassword
-                  ? "🙈"
-                  : "👁️"}
-              </button>
-            </div>
-
-            {/* PASSWORD REQUIREMENT */}
-
-            <div
-              style={{
-                marginBottom: "16px",
-
-                padding: "11px",
-
-                background: "#eff6ff",
-
-                border:
-                  "1px solid #bfdbfe",
-
-                borderRadius: "9px",
-
-                color: "#1e40af",
-
-                fontSize: "13px",
-
-                lineHeight: 1.5,
-              }}
-            >
-              🔒 Password कम से कम 6 characters
-              का होना चाहिए।
-            </div>
+            />
 
             {/* RESET BUTTON */}
 
             <button
               type="button"
-
               onClick={resetPassword}
-
               disabled={loading}
-
               style={{
                 width: "100%",
-
                 padding: "15px",
-
-                border: 0,
-
-                borderRadius: "11px",
-
+                border: "none",
+                borderRadius: "12px",
                 background: loading
                   ? "#86efac"
                   : "#16a34a",
-
-                color: "#fff",
-
+                color: "#ffffff",
                 fontSize: "16px",
-
-                fontWeight: "700",
-
+                fontWeight: "800",
                 cursor: loading
                   ? "not-allowed"
                   : "pointer",
               }}
             >
               {loading
-                ? "⏳ Password बदल रहा है..."
-                : "🔐 Password Reset करें"}
+                ? "Password change हो रहा है..."
+                : "✅ Password Reset करें"}
             </button>
 
-            <button
-              type="button"
-
-              onClick={goToOtp}
-
-              disabled={loading}
-
+            <div
               style={{
-                width: "100%",
-
-                marginTop: "12px",
-
+                marginTop: "15px",
                 padding: "12px",
-
+                background: "#eff6ff",
                 border:
-                  "1px solid #d1d5db",
-
+                  "1px solid #bfdbfe",
                 borderRadius: "10px",
-
-                background: "#fff",
-
-                color: "#475569",
-
-                fontWeight: "600",
-
-                cursor: "pointer",
+                color: "#1d4ed8",
+                fontSize: "13px",
+                lineHeight: 1.6,
               }}
             >
-              ← OTP बदलें
-            </button>
+              ℹ️ OTP की validity Admin द्वारा
+              generate किए जाने के बाद सीमित समय
+              तक रहेगी।
+            </div>
           </>
         )}
 
         {/* ==================================================
-            STEP 4
-            DONE
+            STEP 3 - DONE
         ================================================== */}
 
         {step === "done" && (
-          <>
+          <div
+            style={{
+              textAlign: "center",
+            }}
+          >
             <div
               style={{
-                textAlign: "center",
-
-                padding:
-                  "15px 0 20px",
+                width: "85px",
+                height: "85px",
+                margin:
+                  "5px auto 18px",
+                borderRadius: "50%",
+                background: "#dcfce7",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "45px",
               }}
             >
-              <div
-                style={{
-                  width: "85px",
-
-                  height: "85px",
-
-                  margin:
-                    "0 auto 15px",
-
-                  borderRadius: "50%",
-
-                  background: "#dcfce7",
-
-                  display: "flex",
-
-                  alignItems: "center",
-
-                  justifyContent: "center",
-
-                  fontSize: "48px",
-                }}
-              >
-                ✅
-              </div>
-
-              <h2
-                style={{
-                  color: "#166534",
-
-                  margin: "10px 0",
-
-                  fontSize: "25px",
-                }}
-              >
-                Password Changed!
-              </h2>
-
-              <p
-                style={{
-                  color: "#64748b",
-
-                  lineHeight: 1.6,
-
-                  fontSize: "15px",
-                }}
-              >
-                आपका Password सफलतापूर्वक बदल गया है।
-                अब नए Password से Login करें।
-              </p>
+              ✅
             </div>
+
+            <h3
+              style={{
+                margin:
+                  "0 0 10px",
+                color: "#166534",
+                fontSize: "23px",
+              }}
+            >
+              Password Changed
+            </h3>
+
+            <p
+              style={{
+                color: "#64748b",
+                lineHeight: 1.7,
+                fontSize: "15px",
+                marginBottom: "22px",
+              }}
+            >
+              आपका Password successfully change
+              हो गया है।
+              <br />
+              अब नए Password से Login करें।
+            </p>
 
             <button
               type="button"
-
-              onClick={() => {
-                if (onLogin) {
-                  onLogin();
-                }
-              }}
-
+              onClick={handleLogin}
               style={{
                 width: "100%",
-
                 padding: "15px",
-
-                border: 0,
-
-                borderRadius: "11px",
-
+                border: "none",
+                borderRadius: "12px",
                 background: "#2563eb",
-
-                color: "#fff",
-
+                color: "#ffffff",
                 fontSize: "16px",
-
-                fontWeight: "700",
-
+                fontWeight: "800",
                 cursor: "pointer",
               }}
             >
-              🔐 Login करें
+              🔐 Login पर जाएँ
             </button>
-          </>
+          </div>
         )}
 
         {/* ==================================================
-            BACK TO LOGIN
+            BACK BUTTON
         ================================================== */}
 
         {step !== "done" && (
           <button
             type="button"
-
-            onClick={() => {
-              if (onLogin) {
-                onLogin();
-              } else {
-                handleBack();
-              }
-            }}
-
+            onClick={handleBack}
+            disabled={loading}
             style={{
               width: "100%",
-
-              marginTop: "15px",
-
-              padding: "13px",
-
+              marginTop: "16px",
+              padding: "14px",
               border:
                 "1px solid #cbd5e1",
-
-              borderRadius: "11px",
-
-              background: "#f8fafc",
-
+              borderRadius: "12px",
+              background: "#ffffff",
               color: "#334155",
-
-              fontSize: "15px",
-
+              fontSize: "16px",
               fontWeight: "700",
-
-              cursor: "pointer",
+              cursor: loading
+                ? "not-allowed"
+                : "pointer",
             }}
           >
             ← Login पर वापस जाएँ
           </button>
         )}
 
+        {/* ==================================================
+            BRAND
+        ================================================== */}
+
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "22px",
+            color: "#94a3b8",
+            fontSize: "12px",
+          }}
+        >
+          Exam Test
+        </div>
       </div>
     </div>
   );
