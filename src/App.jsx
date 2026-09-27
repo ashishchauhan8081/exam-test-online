@@ -1,6 +1,7 @@
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -14,11 +15,14 @@ import {
 
 import {
   getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
   signOut,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  RecaptchaVerifier,
   signInWithPhoneNumber,
+  RecaptchaVerifier,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 
 import {
@@ -29,16 +33,7 @@ import {
 
 import firebaseConfig from "./firebase-config.json";
 
-// ======================================================
-// ADMIN PANEL
-// ======================================================
-
 import AdminPanel from "./components/AdminPanel";
-
-// ======================================================
-// AI MCQ GENERATOR
-// ======================================================
-
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
 
@@ -50,7 +45,6 @@ const firebaseApp = getApps().length
   ? getApp()
   : initializeApp({
       ...firebaseConfig,
-
       databaseURL:
         firebaseConfig.databaseURL ||
         "https://study-with-power-f6914-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -58,10 +52,13 @@ const firebaseApp = getApps().length
 
 const auth = getAuth(firebaseApp);
 
+const googleProvider =
+  new GoogleAuthProvider();
+
 const db = getDatabase(firebaseApp);
 
 // ======================================================
-// ADMIN
+// ADMIN EMAIL
 // ======================================================
 
 const ADMIN_EMAIL =
@@ -80,7 +77,6 @@ const exams = [
     description:
       "UPSC Civil Services परीक्षा स्तर",
   },
-
   {
     id: "uppcs",
     name: "UPPCS",
@@ -89,7 +85,6 @@ const exams = [
     description:
       "UPPCS परीक्षा स्तर",
   },
-
   {
     id: "uppet",
     name: "UP PET",
@@ -98,7 +93,6 @@ const exams = [
     description:
       "UP PET परीक्षा स्तर",
   },
-
   {
     id: "bpsc",
     name: "BPSC",
@@ -107,7 +101,6 @@ const exams = [
     description:
       "BPSC परीक्षा स्तर",
   },
-
   {
     id: "mppsc",
     name: "MPPSC",
@@ -116,7 +109,6 @@ const exams = [
     description:
       "MPPSC परीक्षा स्तर",
   },
-
   {
     id: "ssc",
     name: "SSC",
@@ -125,7 +117,6 @@ const exams = [
     description:
       "SSC परीक्षा स्तर",
   },
-
   {
     id: "railway",
     name: "Railway",
@@ -134,7 +125,6 @@ const exams = [
     description:
       "Railway / RRB परीक्षा स्तर",
   },
-
   {
     id: "banking",
     name: "Banking",
@@ -143,7 +133,6 @@ const exams = [
     description:
       "Banking परीक्षा स्तर",
   },
-
   {
     id: "upsssc",
     name: "UPSSSC",
@@ -152,7 +141,6 @@ const exams = [
     description:
       "UPSSSC परीक्षा स्तर",
   },
-
   {
     id: "roaro",
     name: "RO/ARO",
@@ -161,7 +149,6 @@ const exams = [
     description:
       "RO / ARO परीक्षा स्तर",
   },
-
   {
     id: "police",
     name: "Police",
@@ -170,7 +157,6 @@ const exams = [
     description:
       "Police परीक्षा स्तर",
   },
-
   {
     id: "teaching",
     name: "Teaching",
@@ -195,7 +181,6 @@ const defaultResources = [
     page: "resources",
     enabled: true,
   },
-
   {
     id: "2",
     icon: "📰",
@@ -205,7 +190,6 @@ const defaultResources = [
     page: "current",
     enabled: true,
   },
-
   {
     id: "3",
     icon: "📝",
@@ -215,7 +199,6 @@ const defaultResources = [
     page: "mcq",
     enabled: true,
   },
-
   {
     id: "4",
     icon: "📖",
@@ -225,7 +208,6 @@ const defaultResources = [
     page: "resources",
     enabled: true,
   },
-
   {
     id: "5",
     icon: "🎯",
@@ -235,7 +217,6 @@ const defaultResources = [
     page: "tests",
     enabled: true,
   },
-
   {
     id: "6",
     icon: "🤖",
@@ -257,9 +238,7 @@ function normalizeQuestions(questions) {
   }
 
   return questions.map((q, index) => ({
-    id:
-      q?.id ??
-      index + 1,
+    id: q?.id ?? index + 1,
 
     question:
       q?.question ??
@@ -267,27 +246,19 @@ function normalizeQuestions(questions) {
       q?.text ??
       "",
 
-    options:
-      Array.isArray(q?.options)
-        ? [
-            q.options[0] || "",
-            q.options[1] || "",
-            q.options[2] || "",
-            q.options[3] || "",
-          ]
-        : [
-            "",
-            "",
-            "",
-            "",
-          ],
+    options: Array.isArray(q?.options)
+      ? [
+          q.options[0] || "",
+          q.options[1] || "",
+          q.options[2] || "",
+          q.options[3] || "",
+        ]
+      : ["", "", "", ""],
 
-    answer:
-      q?.answer,
+    answer: q?.answer,
 
     explanation:
-      q?.explanation ??
-      "",
+      q?.explanation ?? "",
   }));
 }
 
@@ -296,10 +267,11 @@ function normalizeQuestions(questions) {
 // ======================================================
 
 function getCorrectIndex(question) {
-  const options =
-    Array.isArray(question?.options)
-      ? question.options
-      : [];
+  const options = Array.isArray(
+    question?.options
+  )
+    ? question.options
+    : [];
 
   const answer =
     question?.answer;
@@ -339,8 +311,7 @@ function getCorrectIndex(question) {
   }
 
   if (/^\d+$/.test(raw)) {
-    const n =
-      Number(raw);
+    const n = Number(raw);
 
     if (
       n >= 0 &&
@@ -419,7 +390,7 @@ function getCorrectIndex(question) {
 // USER MOBILE LOGIN
 // ======================================================
 
-function PhoneLogin({
+function UserLogin({
   onSuccess,
   onClose,
 }) {
@@ -438,312 +409,220 @@ function PhoneLogin({
   const [otpSent, setOtpSent] =
     useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const recaptchaRef =
+    useRef(null);
 
-  // ====================================================
-  // SEND OTP
-  // ====================================================
-
-  const sendOTP =
-    async (e) => {
-      if (e) {
-        e.preventDefault();
-      }
-
-      setErrorMessage("");
-
-      const cleanPhone =
-        phone
-          .replace(/\D/g, "")
-          .trim();
-
-      if (
-        cleanPhone.length !== 10
-      ) {
-        setErrorMessage(
-          "कृपया सही 10 अंकों का Mobile Number डालें।"
-        );
-        return;
-      }
-
-      try {
-        setLoading(true);
-
-        // Remove old verifier if already present.
-        if (
-          window.recaptchaVerifier
-        ) {
-          try {
-            window.recaptchaVerifier.clear();
-          } catch (error) {
-            console.log(
-              "Old Recaptcha clear:",
-              error
-            );
-          }
-
-          window.recaptchaVerifier =
-            null;
-        }
-
-        const verifier =
-          new RecaptchaVerifier(
-            auth,
-            "recaptcha-container",
-            {
-              size: "invisible",
-              callback: () => {
-                console.log(
-                  "reCAPTCHA verified"
-                );
-              },
-              "expired-callback": () => {
-                setErrorMessage(
-                  "reCAPTCHA expire हो गया। फिर से OTP भेजें।"
-                );
-              },
-            }
-          );
-
-        window.recaptchaVerifier =
-          verifier;
-
-        const fullPhone =
-          `+91${cleanPhone}`;
-
-        const result =
-          await signInWithPhoneNumber(
-            auth,
-            fullPhone,
-            verifier
-          );
-
-        setConfirmationResult(
-          result
-        );
-
-        setOtpSent(true);
-
-        setErrorMessage("");
-
-        alert(
-          "✅ OTP आपके Mobile Number पर भेज दिया गया है।"
-        );
-      } catch (error) {
-        console.error(
-          "Phone OTP Error:",
-          error
-        );
-
-        if (
-          window.recaptchaVerifier
-        ) {
-          try {
-            window.recaptchaVerifier.clear();
-          } catch (clearError) {
-            console.log(
-              clearError
-            );
-          }
-
-          window.recaptchaVerifier =
-            null;
-        }
-
-        if (
-          error.code ===
-          "auth/invalid-phone-number"
-        ) {
-          setErrorMessage(
-            "❌ Mobile Number सही नहीं है।"
-          );
-        } else if (
-          error.code ===
-          "auth/too-many-requests"
-        ) {
-          setErrorMessage(
-            "❌ बहुत अधिक OTP requests हो गई हैं। कुछ समय बाद फिर प्रयास करें।"
-          );
-        } else if (
-          error.code ===
-          "auth/quota-exceeded"
-        ) {
-          setErrorMessage(
-            "❌ Firebase SMS quota समाप्त हो गया है।"
-          );
-        } else if (
-          error.code ===
-          "auth/captcha-check-failed"
-        ) {
-          setErrorMessage(
-            "❌ reCAPTCHA verification fail हुई।"
-          );
-        } else if (
-          error.code ===
-          "auth/operation-not-allowed"
-        ) {
-          setErrorMessage(
-            "❌ Firebase Console में Phone Authentication Enable नहीं है।"
-          );
-        } else {
-          setErrorMessage(
-            "❌ OTP भेजने में समस्या हुई:\n" +
-              error.message
-          );
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  // ====================================================
-  // VERIFY OTP
-  // ====================================================
-
-  const verifyOTP =
-    async (e) => {
-      if (e) {
-        e.preventDefault();
-      }
-
-      setErrorMessage("");
-
-      if (!confirmationResult) {
-        setErrorMessage(
-          "पहले OTP भेजें।"
-        );
-        return;
-      }
-
-      const cleanOTP =
-        otp.replace(/\D/g, "");
-
-      if (
-        cleanOTP.length !== 6
-      ) {
-        setErrorMessage(
-          "कृपया 6 अंकों का OTP डालें।"
-        );
-        return;
-      }
-
-      try {
-        setLoading(true);
-
-        const result =
-          await confirmationResult.confirm(
-            cleanOTP
-          );
-
-        const loggedUser =
-          result.user;
-
-        alert(
-          "✅ Mobile Login सफल हुआ।"
-        );
-
-        if (onSuccess) {
-          onSuccess(
-            loggedUser
-          );
-        }
-      } catch (error) {
-        console.error(
-          "OTP Verify Error:",
-          error
-        );
-
-        if (
-          error.code ===
-          "auth/invalid-verification-code"
-        ) {
-          setErrorMessage(
-            "❌ OTP गलत है।"
-          );
-        } else if (
-          error.code ===
-          "auth/code-expired"
-        ) {
-          setErrorMessage(
-            "❌ OTP expire हो गया है। नया OTP भेजें।"
-          );
-        } else {
-          setErrorMessage(
-            "❌ OTP verification failed:\n" +
-              error.message
-          );
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  // ====================================================
-  // BACK TO MOBILE
-  // ====================================================
-
-  const changeNumber =
+  const createRecaptcha =
     () => {
-      setOtpSent(false);
-      setOtp("");
-      setConfirmationResult(
-        null
+      if (
+        recaptchaRef.current
+      ) {
+        return recaptchaRef.current;
+      }
+
+      recaptchaRef.current =
+        new RecaptchaVerifier(
+          auth,
+          "recaptcha-container",
+          {
+            size: "normal",
+            callback: () => {
+              console.log(
+                "reCAPTCHA verified"
+              );
+            },
+            "expired-callback": () => {
+              recaptchaRef.current =
+                null;
+            },
+          }
+        );
+
+      return recaptchaRef.current;
+    };
+
+  const sendOTP = async () => {
+    const cleanPhone =
+      phone.replace(
+        /\D/g,
+        ""
       );
-      setErrorMessage("");
+
+    if (
+      cleanPhone.length !== 10
+    ) {
+      alert(
+        "कृपया 10 अंकों का Mobile Number डालें।"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const formattedPhone =
+        `+91${cleanPhone}`;
+
+      const appVerifier =
+        createRecaptcha();
+
+      const result =
+        await signInWithPhoneNumber(
+          auth,
+          formattedPhone,
+          appVerifier
+        );
+
+      setConfirmationResult(
+        result
+      );
+
+      setOtpSent(true);
+
+      alert(
+        "✅ OTP आपके Mobile Number पर भेज दिया गया है।"
+      );
+    } catch (error) {
+      console.error(
+        "Phone Login Error:",
+        error
+      );
 
       if (
-        window.recaptchaVerifier
+        recaptchaRef.current
       ) {
         try {
-          window.recaptchaVerifier.clear();
-        } catch (error) {
-          console.log(
-            error
-          );
-        }
-
-        window.recaptchaVerifier =
+          recaptchaRef.current.clear();
+        } catch {}
+        recaptchaRef.current =
           null;
       }
-    };
 
-  // ====================================================
-  // CLEANUP
-  // ====================================================
-
-  useEffect(() => {
-    return () => {
       if (
-        window.recaptchaVerifier
+        error.code ===
+        "auth/invalid-phone-number"
       ) {
-        try {
-          window.recaptchaVerifier.clear();
-        } catch (error) {
-          console.log(
-            error
-          );
-        }
-
-        window.recaptchaVerifier =
-          null;
+        alert(
+          "❌ Mobile Number गलत है।"
+        );
+      } else if (
+        error.code ===
+        "auth/too-many-requests"
+      ) {
+        alert(
+          "❌ बहुत ज्यादा प्रयास हुए हैं। कुछ समय बाद फिर कोशिश करें।"
+        );
+      } else if (
+        error.code ===
+        "auth/quota-exceeded"
+      ) {
+        alert(
+          "❌ Firebase SMS quota समाप्त हो गया है।"
+        );
+      } else {
+        alert(
+          "❌ OTP भेजने में समस्या:\n" +
+            error.message
+        );
       }
-    };
-  }, []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOTP = async () => {
+    if (
+      !confirmationResult
+    ) {
+      alert(
+        "पहले OTP भेजें।"
+      );
+      return;
+    }
+
+    if (
+      otp.trim().length < 6
+    ) {
+      alert(
+        "कृपया 6 अंकों का OTP डालें।"
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const result =
+        await confirmationResult.confirm(
+          otp.trim()
+        );
+
+      alert(
+        "✅ User Login सफल हुआ।"
+      );
+
+      if (onSuccess) {
+        onSuccess(
+          result.user
+        );
+      }
+    } catch (error) {
+      console.error(
+        "OTP Verify Error:",
+        error
+      );
+
+      if (
+        error.code ===
+        "auth/invalid-verification-code"
+      ) {
+        alert(
+          "❌ OTP गलत है।"
+        );
+      } else if (
+        error.code ===
+        "auth/code-expired"
+      ) {
+        alert(
+          "❌ OTP expire हो गया है। नया OTP भेजें।"
+        );
+      } else {
+        alert(
+          "❌ OTP Verify Error:\n" +
+            error.message
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeNumber = () => {
+    setOtpSent(false);
+    setOtp("");
+    setConfirmationResult(null);
+
+    if (
+      recaptchaRef.current
+    ) {
+      try {
+        recaptchaRef.current.clear();
+      } catch {}
+      recaptchaRef.current =
+        null;
+    }
+  };
 
   return (
     <div
       style={{
-        minHeight:
-          "100vh",
+        minHeight: "100vh",
         display: "flex",
-        alignItems:
-          "center",
-        justifyContent:
-          "center",
+        alignItems: "center",
+        justifyContent: "center",
         padding: "20px",
         background:
-          "linear-gradient(135deg,#eef6ff,#ffffff,#f3e8ff)",
+          "linear-gradient(135deg,#eff6ff,#ffffff,#eef2ff)",
         fontFamily:
           "Arial, sans-serif",
       }}
@@ -753,16 +632,12 @@ function PhoneLogin({
           width: "100%",
           maxWidth: "430px",
           background: "#fff",
-          borderRadius: "20px",
+          borderRadius: "22px",
           padding: "30px",
           boxShadow:
             "0 15px 45px rgba(0,0,0,.15)",
-          boxSizing:
-            "border-box",
         }}
       >
-        {/* HEADER */}
-
         <div
           style={{
             textAlign: "center",
@@ -779,10 +654,8 @@ function PhoneLogin({
 
           <h1
             style={{
-              margin:
-                "10px 0",
-              color:
-                "#1d4ed8",
+              margin: "10px 0",
+              color: "#1264d8",
             }}
           >
             User Login
@@ -790,57 +663,21 @@ function PhoneLogin({
 
           <p
             style={{
-              color:
-                "#64748b",
-              margin:
-                "8px 0",
+              color: "#64748b",
+              fontSize: "16px",
             }}
           >
             Mobile Number से Login करें
           </p>
         </div>
 
-        {/* ERROR */}
-
-        {errorMessage && (
-          <div
-            style={{
-              background:
-                "#fee2e2",
-              color:
-                "#991b1b",
-              border:
-                "1px solid #fecaca",
-              padding:
-                "12px",
-              borderRadius:
-                "10px",
-              marginBottom:
-                "15px",
-              whiteSpace:
-                "pre-wrap",
-              fontSize:
-                "14px",
-              lineHeight:
-                "1.5",
-            }}
-          >
-            {errorMessage}
-          </div>
-        )}
-
         {!otpSent ? (
-          <form
-            onSubmit={sendOTP}
-          >
+          <>
             <label
               style={{
-                display:
-                  "block",
-                fontWeight:
-                  "700",
-                marginBottom:
-                  "8px",
+                display: "block",
+                fontWeight: "700",
+                marginBottom: "8px",
               }}
             >
               📱 Mobile Number
@@ -848,30 +685,20 @@ function PhoneLogin({
 
             <div
               style={{
-                display:
-                  "flex",
-                alignItems:
-                  "center",
-                border:
-                  "1px solid #cbd5e1",
-                borderRadius:
-                  "10px",
-                overflow:
-                  "hidden",
-                marginBottom:
-                  "18px",
+                display: "flex",
+                marginBottom: "18px",
               }}
             >
               <div
                 style={{
-                  padding:
-                    "13px 10px",
-                  background:
-                    "#f1f5f9",
-                  fontWeight:
-                    "700",
-                  color:
-                    "#334155",
+                  padding: "13px 12px",
+                  background: "#f1f5f9",
+                  border:
+                    "1px solid #cbd5e1",
+                  borderRight: "none",
+                  borderRadius:
+                    "10px 0 0 10px",
+                  fontWeight: "700",
                 }}
               >
                 +91
@@ -884,56 +711,50 @@ function PhoneLogin({
                 value={phone}
                 onChange={(e) =>
                   setPhone(
-                    e.target.value
-                      .replace(
-                        /\D/g,
-                        ""
-                      )
-                      .slice(
-                        0,
-                        10
-                      )
+                    e.target.value.replace(
+                      /\D/g,
+                      ""
+                    )
                   )
                 }
                 placeholder="10 digit mobile number"
                 style={{
                   flex: 1,
-                  padding:
-                    "13px",
+                  padding: "13px",
                   border:
-                    "none",
-                  outline:
-                    "none",
-                  fontSize:
-                    "16px",
+                    "1px solid #cbd5e1",
+                  borderRadius:
+                    "0 10px 10px 0",
+                  fontSize: "17px",
+                  boxSizing:
+                    "border-box",
                 }}
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={
-                loading
-              }
+            <div
+              id="recaptcha-container"
               style={{
-                width:
-                  "100%",
-                padding:
-                  "14px",
-                border:
-                  "none",
-                borderRadius:
-                  "10px",
+                marginBottom: "18px",
+              }}
+            />
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={sendOTP}
+              style={{
+                width: "100%",
+                padding: "14px",
+                border: "none",
+                borderRadius: "10px",
                 background:
                   loading
                     ? "#94a3b8"
-                    : "#1d4ed8",
-                color:
-                  "#fff",
-                fontSize:
-                  "17px",
-                fontWeight:
-                  "700",
+                    : "#1264d8",
+                color: "#fff",
+                fontSize: "17px",
+                fontWeight: "700",
                 cursor:
                   loading
                     ? "not-allowed"
@@ -944,47 +765,33 @@ function PhoneLogin({
                 ? "⏳ OTP भेजा जा रहा है..."
                 : "📲 OTP भेजें"}
             </button>
-          </form>
+          </>
         ) : (
-          <form
-            onSubmit={verifyOTP}
-          >
+          <>
             <div
               style={{
-                background:
-                  "#eff6ff",
-                border:
-                  "1px solid #bfdbfe",
-                padding:
-                  "12px",
-                borderRadius:
-                  "10px",
-                marginBottom:
-                  "18px",
-                textAlign:
-                  "center",
-                color:
-                  "#1e40af",
+                background: "#eff6ff",
+                padding: "14px",
+                borderRadius: "10px",
+                marginBottom: "18px",
+                color: "#1e40af",
               }}
             >
+              📱 OTP भेजा गया:
               <strong>
-                +91 {phone}
+                {" +91 "}
+                {phone}
               </strong>
-              <br />
-              पर OTP भेजा गया है।
             </div>
 
             <label
               style={{
-                display:
-                  "block",
-                fontWeight:
-                  "700",
-                marginBottom:
-                  "8px",
+                display: "block",
+                fontWeight: "700",
+                marginBottom: "8px",
               }}
             >
-              🔐 OTP डालें
+              🔢 OTP डालें
             </label>
 
             <input
@@ -994,65 +801,44 @@ function PhoneLogin({
               value={otp}
               onChange={(e) =>
                 setOtp(
-                  e.target.value
-                    .replace(
-                      /\D/g,
-                      ""
-                    )
-                    .slice(
-                      0,
-                      6
-                    )
+                  e.target.value.replace(
+                    /\D/g,
+                    ""
+                  )
                 )
               }
               placeholder="6 digit OTP"
-              autoFocus
               style={{
-                width:
-                  "100%",
-                padding:
-                  "14px",
+                width: "100%",
+                padding: "14px",
                 border:
                   "1px solid #cbd5e1",
-                borderRadius:
-                  "10px",
-                fontSize:
-                  "20px",
-                letterSpacing:
-                  "5px",
-                textAlign:
-                  "center",
+                borderRadius: "10px",
+                fontSize: "20px",
+                letterSpacing: "5px",
+                textAlign: "center",
                 boxSizing:
                   "border-box",
-                marginBottom:
-                  "18px",
+                marginBottom: "15px",
               }}
             />
 
             <button
-              type="submit"
-              disabled={
-                loading
-              }
+              type="button"
+              disabled={loading}
+              onClick={verifyOTP}
               style={{
-                width:
-                  "100%",
-                padding:
-                  "14px",
-                border:
-                  "none",
-                borderRadius:
-                  "10px",
+                width: "100%",
+                padding: "14px",
+                border: "none",
+                borderRadius: "10px",
                 background:
                   loading
                     ? "#94a3b8"
                     : "#16a34a",
-                color:
-                  "#fff",
-                fontSize:
-                  "17px",
-                fontWeight:
-                  "700",
+                color: "#fff",
+                fontSize: "17px",
+                fontWeight: "700",
                 cursor:
                   loading
                     ? "not-allowed"
@@ -1061,72 +847,41 @@ function PhoneLogin({
             >
               {loading
                 ? "⏳ Verify हो रहा है..."
-                : "✅ OTP Verify करके Login"}
+                : "✅ OTP Verify करें"}
             </button>
 
             <button
               type="button"
-              onClick={
-                changeNumber
-              }
+              onClick={changeNumber}
               style={{
-                width:
-                  "100%",
-                marginTop:
-                  "12px",
-                padding:
-                  "12px",
-                border:
-                  "1px solid #cbd5e1",
-                borderRadius:
-                  "10px",
-                background:
-                  "#fff",
-                color:
-                  "#334155",
-                fontSize:
-                  "15px",
-                fontWeight:
-                  "700",
-                cursor:
-                  "pointer",
+                width: "100%",
+                marginTop: "12px",
+                padding: "12px",
+                border: "none",
+                borderRadius: "10px",
+                background: "#e2e8f0",
+                color: "#334155",
+                fontWeight: "700",
               }}
             >
               ← Mobile Number बदलें
             </button>
-          </form>
+          </>
         )}
-
-        {/* RECAPTCHA */}
-
-        <div
-          id="recaptcha-container"
-        />
 
         <button
           type="button"
           onClick={onClose}
           style={{
-            width:
-              "100%",
-            marginTop:
-              "12px",
-            padding:
-              "12px",
-            border:
-              "none",
-            borderRadius:
-              "10px",
-            background:
-              "#e2e8f0",
-            color:
-              "#334155",
-            fontSize:
-              "16px",
-            fontWeight:
-              "700",
-            cursor:
-              "pointer",
+            width: "100%",
+            marginTop: "12px",
+            padding: "12px",
+            border: "none",
+            borderRadius: "10px",
+            background: "#f1f5f9",
+            color: "#334155",
+            fontSize: "16px",
+            fontWeight: "700",
           }}
         >
           ← Website पर वापस जाएँ
@@ -1151,6 +906,12 @@ function AdminLogin({
     useState("");
 
   const [loading, setLoading] =
+    useState(false);
+
+  const [showForgot, setShowForgot] =
+    useState(false);
+
+  const [resetLoading, setResetLoading] =
     useState(false);
 
   const handleLogin =
@@ -1229,20 +990,6 @@ function AdminLogin({
           alert(
             "❌ Admin Password गलत है।"
           );
-        } else if (
-          error.code ===
-          "auth/invalid-email"
-        ) {
-          alert(
-            "❌ Admin Email सही नहीं है।"
-          );
-        } else if (
-          error.code ===
-          "auth/too-many-requests"
-        ) {
-          alert(
-            "❌ बहुत अधिक login attempts हो गए हैं। कुछ समय बाद फिर प्रयास करें।"
-          );
         } else {
           alert(
             "❌ Admin Login Error:\n" +
@@ -1254,16 +1001,55 @@ function AdminLogin({
       }
     };
 
+  const resetAdminPassword =
+    async () => {
+      const targetEmail =
+        email.trim().toLowerCase();
+
+      if (
+        targetEmail !==
+        ADMIN_EMAIL.toLowerCase()
+      ) {
+        alert(
+          `Admin Email केवल ${ADMIN_EMAIL} है।`
+        );
+        return;
+      }
+
+      try {
+        setResetLoading(true);
+
+        await sendPasswordResetEmail(
+          auth,
+          targetEmail
+        );
+
+        alert(
+          "✅ Password reset link Admin Email पर भेज दिया गया है।"
+        );
+
+        setShowForgot(false);
+      } catch (error) {
+        console.error(
+          error
+        );
+
+        alert(
+          "❌ Password reset error:\n" +
+            error.message
+        );
+      } finally {
+        setResetLoading(false);
+      }
+    };
+
   return (
     <div
       style={{
-        minHeight:
-          "100vh",
+        minHeight: "100vh",
         display: "flex",
-        alignItems:
-          "center",
-        justifyContent:
-          "center",
+        alignItems: "center",
+        justifyContent: "center",
         padding: "20px",
         background:
           "linear-gradient(135deg,#eef6ff,#ffffff,#f3e8ff)",
@@ -1280,8 +1066,6 @@ function AdminLogin({
           padding: "30px",
           boxShadow:
             "0 15px 45px rgba(0,0,0,.15)",
-          boxSizing:
-            "border-box",
         }}
       >
         <div
@@ -1300,10 +1084,8 @@ function AdminLogin({
 
           <h1
             style={{
-              margin:
-                "10px 0",
-              color:
-                "#1d4ed8",
+              margin: "10px 0",
+              color: "#1d4ed8",
             }}
           >
             Admin Login
@@ -1311,8 +1093,7 @@ function AdminLogin({
 
           <p
             style={{
-              color:
-                "#64748b",
+              color: "#64748b",
             }}
           >
             Exam Test Admin Panel
@@ -1324,12 +1105,9 @@ function AdminLogin({
         >
           <label
             style={{
-              display:
-                "block",
-              fontWeight:
-                "700",
-              marginBottom:
-                "7px",
+              display: "block",
+              fontWeight: "700",
+              marginBottom: "7px",
             }}
           >
             📧 Admin Email
@@ -1346,16 +1124,12 @@ function AdminLogin({
             placeholder="Admin Email"
             style={{
               width: "100%",
-              padding:
-                "13px",
+              padding: "13px",
               border:
                 "1px solid #cbd5e1",
-              borderRadius:
-                "10px",
-              fontSize:
-                "16px",
-              marginBottom:
-                "18px",
+              borderRadius: "10px",
+              fontSize: "16px",
+              marginBottom: "18px",
               boxSizing:
                 "border-box",
             }}
@@ -1363,12 +1137,9 @@ function AdminLogin({
 
           <label
             style={{
-              display:
-                "block",
-              fontWeight:
-                "700",
-              marginBottom:
-                "7px",
+              display: "block",
+              fontWeight: "700",
+              marginBottom: "7px",
             }}
           >
             🔐 Admin Password
@@ -1385,16 +1156,12 @@ function AdminLogin({
             placeholder="Admin Password"
             style={{
               width: "100%",
-              padding:
-                "13px",
+              padding: "13px",
               border:
                 "1px solid #cbd5e1",
-              borderRadius:
-                "10px",
-              fontSize:
-                "16px",
-              marginBottom:
-                "20px",
+              borderRadius: "10px",
+              fontSize: "16px",
+              marginBottom: "15px",
               boxSizing:
                 "border-box",
             }}
@@ -1405,24 +1172,16 @@ function AdminLogin({
             disabled={loading}
             style={{
               width: "100%",
-              padding:
-                "14px",
+              padding: "14px",
               border: "none",
-              borderRadius:
-                "10px",
+              borderRadius: "10px",
               background:
                 loading
                   ? "#94a3b8"
                   : "#1d4ed8",
               color: "#fff",
-              fontSize:
-                "17px",
-              fontWeight:
-                "700",
-              cursor:
-                loading
-                  ? "not-allowed"
-                  : "pointer",
+              fontSize: "17px",
+              fontWeight: "700",
             }}
           >
             {loading
@@ -1433,29 +1192,166 @@ function AdminLogin({
 
         <button
           type="button"
+          onClick={() =>
+            setShowForgot(
+              !showForgot
+            )
+          }
+          style={{
+            width: "100%",
+            marginTop: "12px",
+            padding: "11px",
+            border: "none",
+            background: "transparent",
+            color: "#2563eb",
+            fontWeight: "700",
+          }}
+        >
+          🔑 Admin Password भूल गए?
+        </button>
+
+        {showForgot && (
+          <div
+            style={{
+              marginTop: "8px",
+              padding: "15px",
+              borderRadius: "12px",
+              background: "#eff6ff",
+              border:
+                "1px solid #bfdbfe",
+            }}
+          >
+            <p
+              style={{
+                marginTop: 0,
+                color: "#334155",
+              }}
+            >
+              Admin password reset link
+              इस email पर जाएगा:
+            </p>
+
+            <strong>
+              {ADMIN_EMAIL}
+            </strong>
+
+            <button
+              type="button"
+              disabled={
+                resetLoading
+              }
+              onClick={
+                resetAdminPassword
+              }
+              style={{
+                width: "100%",
+                marginTop: "12px",
+                padding: "11px",
+                border: "none",
+                borderRadius: "9px",
+                background:
+                  "#16a34a",
+                color: "#fff",
+                fontWeight: "700",
+              }}
+            >
+              {resetLoading
+                ? "⏳ भेजा जा रहा है..."
+                : "📧 Reset Email भेजें"}
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
           onClick={onClose}
           style={{
             width: "100%",
-            marginTop:
-              "12px",
-            padding:
-              "12px",
+            marginTop: "12px",
+            padding: "12px",
             border: "none",
-            borderRadius:
-              "10px",
-            background:
-              "#e2e8f0",
-            color:
-              "#334155",
-            fontSize:
-              "16px",
-            fontWeight:
-              "700",
-            cursor:
-              "pointer",
+            borderRadius: "10px",
+            background: "#e2e8f0",
+            color: "#334155",
+            fontSize: "16px",
+            fontWeight: "700",
           }}
         >
           ← Website पर वापस जाएँ
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================
+// LOGIN REQUIRED SCREEN
+// ======================================================
+
+function LoginRequired({
+  onLogin,
+  onBack,
+}) {
+  return (
+    <div
+      className="container"
+      style={{
+        paddingTop: "50px",
+        paddingBottom: "80px",
+      }}
+    >
+      <div
+        className="empty-box"
+        style={{
+          maxWidth: "600px",
+          margin: "auto",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "70px",
+            marginBottom: "15px",
+          }}
+        >
+          🔐
+        </div>
+
+        <h2>
+          Login करना जरूरी है
+        </h2>
+
+        <p
+          style={{
+            fontSize: "18px",
+            color: "#64748b",
+          }}
+        >
+          इस section को खोलने के लिए
+          पहले User Login करें।
+        </p>
+
+        <button
+          className="open-btn"
+          onClick={onLogin}
+          style={{
+            marginTop: "15px",
+            minWidth: "220px",
+          }}
+        >
+          📱 User Login
+        </button>
+
+        <br />
+
+        <button
+          className="back"
+          onClick={onBack}
+          style={{
+            marginTop: "15px",
+          }}
+        >
+          ← Home पर वापस जाएँ
         </button>
       </div>
     </div>
@@ -1496,10 +1392,8 @@ function TestRunner({
     border: "none",
     borderRadius: "10px",
     cursor: "pointer",
-    fontFamily:
-      "inherit",
-    boxSizing:
-      "border-box",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
   };
 
   const calculateResult =
@@ -1545,8 +1439,7 @@ function TestRunner({
     return (
       <div
         style={{
-          padding:
-            "20px",
+          padding: "20px",
         }}
       >
         <button
@@ -1554,16 +1447,11 @@ function TestRunner({
           onClick={onBack}
           style={{
             ...buttonBase,
-            padding:
-              "12px 20px",
-            background:
-              "#e2e8f0",
-            color:
-              "#111827",
-            fontSize:
-              "17px",
-            fontWeight:
-              "700",
+            padding: "12px 20px",
+            background: "#e2e8f0",
+            color: "#111827",
+            fontSize: "17px",
+            fontWeight: "700",
           }}
         >
           ← Test List
@@ -1571,16 +1459,11 @@ function TestRunner({
 
         <div
           style={{
-            marginTop:
-              "20px",
-            background:
-              "#fff",
-            padding:
-              "40px",
-            borderRadius:
-              "18px",
-            textAlign:
-              "center",
+            marginTop: "20px",
+            background: "#fff",
+            padding: "40px",
+            borderRadius: "18px",
+            textAlign: "center",
           }}
         >
           <h2>
@@ -1591,10 +1474,6 @@ function TestRunner({
       </div>
     );
   }
-
-  // ====================================================
-  // RESULT
-  // ====================================================
 
   if (submitted) {
     const {
@@ -1607,32 +1486,24 @@ function TestRunner({
     return (
       <div
         style={{
-          padding:
-            "20px",
+          padding: "20px",
         }}
       >
         <div
           style={{
-            maxWidth:
-              "760px",
-            margin:
-              "30px auto",
-            background:
-              "#fff",
-            borderRadius:
-              "18px",
-            padding:
-              "35px",
-            textAlign:
-              "center",
+            maxWidth: "760px",
+            margin: "30px auto",
+            background: "#fff",
+            borderRadius: "18px",
+            padding: "35px",
+            textAlign: "center",
             boxShadow:
               "0 10px 35px rgba(0,0,0,.10)",
           }}
         >
           <div
             style={{
-              fontSize:
-                "52px",
+              fontSize: "52px",
             }}
           >
             🎉
@@ -1640,8 +1511,7 @@ function TestRunner({
 
           <h1
             style={{
-              color:
-                "#1d4ed8",
+              color: "#1d4ed8",
             }}
           >
             Test Complete
@@ -1654,14 +1524,10 @@ function TestRunner({
 
           <div
             style={{
-              fontSize:
-                "42px",
-              fontWeight:
-                "800",
-              color:
-                "#1d4ed8",
-              margin:
-                "20px 0",
+              fontSize: "42px",
+              fontWeight: "800",
+              color: "#1d4ed8",
+              margin: "20px 0",
             }}
           >
             {correct} /{" "}
@@ -1670,8 +1536,7 @@ function TestRunner({
 
           <p
             style={{
-              fontSize:
-                "20px",
+              fontSize: "20px",
             }}
           >
             प्रतिशत:{" "}
@@ -1682,30 +1547,22 @@ function TestRunner({
 
           <div
             style={{
-              display:
-                "flex",
+              display: "flex",
               justifyContent:
                 "center",
-              gap:
-                "15px",
-              flexWrap:
-                "wrap",
-              margin:
-                "25px 0",
+              gap: "15px",
+              flexWrap: "wrap",
+              margin: "25px 0",
             }}
           >
             <div
               style={{
                 padding:
                   "15px 25px",
-                borderRadius:
-                  "12px",
-                background:
-                  "#dcfce7",
-                color:
-                  "#166534",
-                fontWeight:
-                  "800",
+                borderRadius: "12px",
+                background: "#dcfce7",
+                color: "#166534",
+                fontWeight: "800",
               }}
             >
               ✓ सही: {correct}
@@ -1715,14 +1572,10 @@ function TestRunner({
               style={{
                 padding:
                   "15px 25px",
-                borderRadius:
-                  "12px",
-                background:
-                  "#fee2e2",
-                color:
-                  "#991b1b",
-                fontWeight:
-                  "800",
+                borderRadius: "12px",
+                background: "#fee2e2",
+                color: "#991b1b",
+                fontWeight: "800",
               }}
             >
               ✗ गलत: {wrong}
@@ -1731,14 +1584,11 @@ function TestRunner({
 
           <div
             style={{
-              display:
-                "flex",
+              display: "flex",
               justifyContent:
                 "center",
-              gap:
-                "12px",
-              flexWrap:
-                "wrap",
+              gap: "12px",
+              flexWrap: "wrap",
             }}
           >
             <button
@@ -1746,15 +1596,9 @@ function TestRunner({
               onClick={() => {
                 setCurrent(0);
                 setAnswers({});
-                setSubmitted(
-                  false
-                );
-                setReviewMode(
-                  true
-                );
-                setShowExplanation(
-                  false
-                );
+                setSubmitted(false);
+                setReviewMode(true);
+                setShowExplanation(false);
               }}
               style={{
                 ...buttonBase,
@@ -1762,12 +1606,9 @@ function TestRunner({
                   "13px 20px",
                 background:
                   "#1264d8",
-                color:
-                  "#fff",
-                fontSize:
-                  "17px",
-                fontWeight:
-                  "700",
+                color: "#fff",
+                fontSize: "17px",
+                fontWeight: "700",
               }}
             >
               🔄 Questions Retest /
@@ -1783,12 +1624,9 @@ function TestRunner({
                   "13px 20px",
                 background:
                   "#e2e8f0",
-                color:
-                  "#111827",
-                fontSize:
-                  "17px",
-                fontWeight:
-                  "700",
+                color: "#111827",
+                fontSize: "17px",
+                fontWeight: "700",
               }}
             >
               ← Test List
@@ -1815,12 +1653,11 @@ function TestRunner({
 
   const goPrevious =
     () => {
-      setCurrent(
-        (value) =>
-          Math.max(
-            0,
-            value - 1
-          )
+      setCurrent((value) =>
+        Math.max(
+          0,
+          value - 1
+        )
       );
 
       setShowExplanation(
@@ -1858,8 +1695,7 @@ function TestRunner({
       setAnswers(
         (prev) => ({
           ...prev,
-          [current]:
-            index,
+          [current]: index,
         })
       );
 
@@ -1872,17 +1708,14 @@ function TestRunner({
           () => {
             if (
               current <
-              questions.length -
-                1
+              questions.length - 1
             ) {
               setCurrent(
                 (value) =>
                   value + 1
               );
             } else {
-              setSubmitted(
-                true
-              );
+              setSubmitted(true);
             }
           },
           180
@@ -1893,12 +1726,9 @@ function TestRunner({
   return (
     <div
       style={{
-        padding:
-          "20px",
-        maxWidth:
-          "1200px",
-        margin:
-          "auto",
+        padding: "20px",
+        maxWidth: "1200px",
+        margin: "auto",
       }}
     >
       <button
@@ -1906,18 +1736,12 @@ function TestRunner({
         onClick={onBack}
         style={{
           ...buttonBase,
-          padding:
-            "12px 20px",
-          background:
-            "#e2e8f0",
-          color:
-            "#111827",
-          fontSize:
-            "17px",
-          fontWeight:
-            "700",
-          marginBottom:
-            "20px",
+          padding: "12px 20px",
+          background: "#e2e8f0",
+          color: "#111827",
+          fontSize: "17px",
+          fontWeight: "700",
+          marginBottom: "20px",
         }}
       >
         ← Test List
@@ -1925,32 +1749,25 @@ function TestRunner({
 
       <div
         style={{
-          background:
-            "#fff",
+          background: "#fff",
           border:
             "1px solid #dbe3ee",
-          borderRadius:
-            "18px",
-          padding:
-            "30px",
+          borderRadius: "18px",
+          padding: "30px",
         }}
       >
         <div
           style={{
             borderBottom:
               "1px solid #e2e8f0",
-            paddingBottom:
-              "18px",
-            marginBottom:
-              "28px",
+            paddingBottom: "18px",
+            marginBottom: "28px",
           }}
         >
           <div
             style={{
-              fontSize:
-                "22px",
-              fontWeight:
-                "800",
+              fontSize: "22px",
+              fontWeight: "800",
             }}
           >
             {test?.exam ||
@@ -1959,12 +1776,9 @@ function TestRunner({
 
           <div
             style={{
-              fontSize:
-                "20px",
-              fontWeight:
-                "700",
-              marginTop:
-                "5px",
+              fontSize: "20px",
+              fontWeight: "700",
+              marginTop: "5px",
             }}
           >
             {test?.title ||
@@ -1975,14 +1789,10 @@ function TestRunner({
 
           <div
             style={{
-              fontSize:
-                "18px",
-              fontWeight:
-                "700",
-              marginTop:
-                "7px",
-              color:
-                "#334155",
+              fontSize: "18px",
+              fontWeight: "700",
+              marginTop: "7px",
+              color: "#334155",
             }}
           >
             प्रश्न{" "}
@@ -1992,10 +1802,8 @@ function TestRunner({
             {reviewMode && (
               <span
                 style={{
-                  marginLeft:
-                    "10px",
-                  color:
-                    "#7c3aed",
+                  marginLeft: "10px",
+                  color: "#7c3aed",
                 }}
               >
                 • Review Mode
@@ -2006,16 +1814,14 @@ function TestRunner({
 
         <div
           style={{
-            marginBottom:
-              "28px",
+            marginBottom: "28px",
           }}
         >
           <h2
             style={{
               fontSize:
                 "clamp(20px,3vw,28px)",
-              lineHeight:
-                "1.6",
+              lineHeight: "1.6",
             }}
           >
             {current + 1}.{" "}
@@ -2025,25 +1831,17 @@ function TestRunner({
 
         <div
           style={{
-            display:
-              "flex",
-            flexDirection:
-              "column",
-            gap:
-              "14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
           }}
         >
-          {(question.options ||
-            [])
+          {(question.options || [])
             .slice(0, 4)
             .map(
-              (
-                option,
-                index
-              ) => {
+              (option, index) => {
                 const isSelected =
-                  selected ===
-                  index;
+                  selected === index;
 
                 const isCorrect =
                   index ===
@@ -2081,9 +1879,7 @@ function TestRunner({
 
                 return (
                   <button
-                    key={
-                      index
-                    }
+                    key={index}
                     type="button"
                     disabled={
                       reviewMode &&
@@ -2096,40 +1892,30 @@ function TestRunner({
                     }
                     style={{
                       ...buttonBase,
-                      width:
-                        "100%",
-                      minHeight:
-                        "64px",
+                      width: "100%",
+                      minHeight: "64px",
                       padding:
                         "16px 20px",
                       background,
-                      color:
-                        "#fff",
-                      textAlign:
-                        "left",
-                      fontSize:
-                        "20px",
-                      fontWeight:
-                        "700",
-                      lineHeight:
-                        "1.4",
-                      display:
-                        "flex",
+                      color: "#fff",
+                      textAlign: "left",
+                      fontSize: "20px",
+                      fontWeight: "700",
+                      lineHeight: "1.4",
+                      display: "flex",
                       alignItems:
                         "center",
                     }}
                   >
                     <span
                       style={{
-                        width:
-                          "45px",
+                        width: "45px",
                         flex:
                           "0 0 45px",
                       }}
                     >
                       {String.fromCharCode(
-                        65 +
-                          index
+                        65 + index
                       )}
                       .
                     </span>
@@ -2148,26 +1934,19 @@ function TestRunner({
           hasSelected && (
             <div
               style={{
-                marginTop:
-                  "20px",
-                padding:
-                  "18px",
-                background:
-                  "#eff6ff",
+                marginTop: "20px",
+                padding: "18px",
+                background: "#eff6ff",
                 border:
                   "1px solid #bfdbfe",
-                borderRadius:
-                  "12px",
+                borderRadius: "12px",
               }}
             >
               <div
                 style={{
-                  fontSize:
-                    "19px",
-                  fontWeight:
-                    "800",
-                  marginBottom:
-                    "8px",
+                  fontSize: "19px",
+                  fontWeight: "800",
+                  marginBottom: "8px",
                 }}
               >
                 {selected ===
@@ -2184,12 +1963,9 @@ function TestRunner({
 
               <div
                 style={{
-                  fontSize:
-                    "18px",
-                  fontWeight:
-                    "800",
-                  marginBottom:
-                    "6px",
+                  fontSize: "19px",
+                  fontWeight: "800",
+                  marginBottom: "6px",
                 }}
               >
                 💡 व्याख्या
@@ -2197,10 +1973,8 @@ function TestRunner({
 
               <div
                 style={{
-                  fontSize:
-                    "17px",
-                  lineHeight:
-                    "1.6",
+                  fontSize: "17px",
+                  lineHeight: "1.6",
                   whiteSpace:
                     "pre-wrap",
                 }}
@@ -2213,28 +1987,19 @@ function TestRunner({
 
         <div
           style={{
-            display:
-              "flex",
+            display: "flex",
             justifyContent:
               "space-between",
-            alignItems:
-              "center",
-            gap:
-              "12px",
-            marginTop:
-              "30px",
-            flexWrap:
-              "wrap",
+            alignItems: "center",
+            gap: "12px",
+            marginTop: "30px",
+            flexWrap: "wrap",
           }}
         >
           <button
             type="button"
-            disabled={
-              current === 0
-            }
-            onClick={
-              goPrevious
-            }
+            disabled={current === 0}
+            onClick={goPrevious}
             style={{
               ...buttonBase,
               padding:
@@ -2243,12 +2008,9 @@ function TestRunner({
                 current === 0
                   ? "#bfdbfe"
                   : "#1264d8",
-              color:
-                "#fff",
-              fontSize:
-                "17px",
-              fontWeight:
-                "700",
+              color: "#fff",
+              fontSize: "17px",
+              fontWeight: "700",
             }}
           >
             ← Previous
@@ -2257,12 +2019,8 @@ function TestRunner({
           {reviewMode ? (
             <button
               type="button"
-              disabled={
-                !hasSelected
-              }
-              onClick={
-                goNext
-              }
+              disabled={!hasSelected}
+              onClick={goNext}
               style={{
                 ...buttonBase,
                 padding:
@@ -2271,27 +2029,21 @@ function TestRunner({
                   hasSelected
                     ? "#1264d8"
                     : "#94a3b8",
-                color:
-                  "#fff",
-                fontSize:
-                  "17px",
-                fontWeight:
-                  "700",
+                color: "#fff",
+                fontSize: "17px",
+                fontWeight: "700",
               }}
             >
               {current ===
-              questions.length -
-                1
+              questions.length - 1
                 ? "✓ Review Complete"
                 : "Next →"}
             </button>
           ) : (
             <div
               style={{
-                color:
-                  "#64748b",
-                fontWeight:
-                  "600",
+                color: "#64748b",
+                fontWeight: "600",
               }}
             >
               विकल्प चुनते ही अगला
@@ -2338,7 +2090,7 @@ export default function App() {
   const [adminLoginOpen, setAdminLoginOpen] =
     useState(false);
 
-  const [phoneLoginOpen, setPhoneLoginOpen] =
+  const [userLoginOpen, setUserLoginOpen] =
     useState(false);
 
   // ====================================================
@@ -2411,9 +2163,7 @@ export default function App() {
             snapshot.val();
 
           if (
-            Array.isArray(
-              value
-            ) &&
+            Array.isArray(value) &&
             value.length
           ) {
             setSiteResources(
@@ -2425,9 +2175,7 @@ export default function App() {
               "object"
           ) {
             setSiteResources(
-              Object.values(
-                value
-              )
+              Object.values(value)
             );
           } else {
             setSiteResources(
@@ -2488,16 +2236,62 @@ export default function App() {
     }, [cloudTests]);
 
   // ====================================================
-  // USER LOGIN - OPEN PHONE LOGIN
+  // GOOGLE LOGIN - OPTIONAL
   // ====================================================
 
-  const login =
+  const googleLogin =
     async () => {
-      setPhoneLoginOpen(
-        true
+      try {
+        const result =
+          await signInWithPopup(
+            auth,
+            googleProvider
+          );
+
+        return result.user;
+      } catch (error) {
+        console.error(
+          "Google Login Error:",
+          error
+        );
+
+        alert(
+          "Google Login नहीं हुआ:\n" +
+            error.message
+        );
+
+        return null;
+      }
+    };
+
+  // ====================================================
+  // USER LOGIN SUCCESS
+  // ====================================================
+
+  const handleUserLoginSuccess =
+    (loggedUser) => {
+      setUser(
+        loggedUser
       );
 
-      return null;
+      setUserLoginOpen(
+        false
+      );
+
+      alert(
+        "✅ User Login सफल हुआ।"
+      );
+    };
+
+  // ====================================================
+  // OPEN USER LOGIN
+  // ====================================================
+
+  const openUserLogin =
+    () => {
+      setUserLoginOpen(
+        true
+      );
     };
 
   // ====================================================
@@ -2509,27 +2303,14 @@ export default function App() {
       try {
         await signOut(auth);
 
-        setAdminOpen(
-          false
-        );
-
-        setAdminLoginOpen(
-          false
-        );
-
-        setPhoneLoginOpen(
-          false
-        );
+        setAdminOpen(false);
+        setAdminLoginOpen(false);
+        setUserLoginOpen(false);
 
         setPage("home");
 
-        setSelectedExam(
-          null
-        );
-
-        setSelectedTest(
-          null
-        );
+        setSelectedExam(null);
+        setSelectedTest(null);
       } catch (error) {
         console.error(
           error
@@ -2581,18 +2362,19 @@ export default function App() {
     };
 
   // ====================================================
-  // PHONE LOGIN SUCCESS
+  // CHECK USER LOGIN
   // ====================================================
 
-  const handlePhoneLoginSuccess =
-    (loggedUser) => {
-      setUser(
-        loggedUser
-      );
+  const requireUserLogin =
+    (callback) => {
+      if (!user) {
+        setUserLoginOpen(
+          true
+        );
+        return;
+      }
 
-      setPhoneLoginOpen(
-        false
-      );
+      callback();
     };
 
   // ====================================================
@@ -2603,30 +2385,16 @@ export default function App() {
     () => {
       setPage("home");
 
-      setSelectedExam(
-        null
-      );
+      setSelectedExam(null);
+      setSelectedTest(null);
 
-      setSelectedTest(
-        null
-      );
-
-      setAdminOpen(
-        false
-      );
-
-      setAdminLoginOpen(
-        false
-      );
-
-      setPhoneLoginOpen(
-        false
-      );
+      setAdminOpen(false);
+      setAdminLoginOpen(false);
+      setUserLoginOpen(false);
 
       window.scrollTo({
         top: 0,
-        behavior:
-          "smooth",
+        behavior: "smooth",
       });
     };
 
@@ -2636,20 +2404,19 @@ export default function App() {
 
   const openExam =
     (exam) => {
-      setSelectedExam(
-        exam
-      );
+      requireUserLogin(() => {
+        setSelectedExam(
+          exam
+        );
 
-      setPage("tests");
+        setPage("tests");
 
-      setSelectedTest(
-        null
-      );
+        setSelectedTest(null);
 
-      window.scrollTo({
-        top: 0,
-        behavior:
-          "smooth",
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
       });
     };
 
@@ -2658,19 +2425,18 @@ export default function App() {
   // ====================================================
 
   const openTest =
-    async (test) => {
-      if (!test) {
-        alert(
-          "❌ Test उपलब्ध नहीं है।"
+    (test) => {
+      if (!user) {
+        setUserLoginOpen(
+          true
         );
         return;
       }
 
-      if (!user) {
-        setPhoneLoginOpen(
-          true
+      if (!test) {
+        alert(
+          "❌ Test उपलब्ध नहीं है।"
         );
-
         return;
       }
 
@@ -2694,22 +2460,15 @@ export default function App() {
     return (
       <div
         style={{
-          minHeight:
-            "100vh",
-          display:
-            "flex",
+          minHeight: "100vh",
+          display: "flex",
           justifyContent:
             "center",
-          alignItems:
-            "center",
-          background:
-            "#eef5ff",
-          fontSize:
-            "22px",
-          fontWeight:
-            "700",
-          color:
-            "#1857c9",
+          alignItems: "center",
+          background: "#eef5ff",
+          fontSize: "22px",
+          fontWeight: "700",
+          color: "#1857c9",
         }}
       >
         📚 Exam Test Loading...
@@ -2718,19 +2477,17 @@ export default function App() {
   }
 
   // ====================================================
-  // USER PHONE LOGIN
+  // ADMIN LOGIN
   // ====================================================
 
-  if (
-    phoneLoginOpen
-  ) {
+  if (adminLoginOpen) {
     return (
-      <PhoneLogin
+      <AdminLogin
         onSuccess={
-          handlePhoneLoginSuccess
+          handleAdminLoginSuccess
         }
         onClose={() =>
-          setPhoneLoginOpen(
+          setAdminLoginOpen(
             false
           )
         }
@@ -2739,19 +2496,17 @@ export default function App() {
   }
 
   // ====================================================
-  // ADMIN LOGIN
+  // USER LOGIN
   // ====================================================
 
-  if (
-    adminLoginOpen
-  ) {
+  if (userLoginOpen) {
     return (
-      <AdminLogin
+      <UserLogin
         onSuccess={
-          handleAdminLoginSuccess
+          handleUserLoginSuccess
         }
         onClose={() =>
-          setAdminLoginOpen(
+          setUserLoginOpen(
             false
           )
         }
@@ -2792,41 +2547,16 @@ export default function App() {
   ) {
     if (!user) {
       return (
-        <div className="app">
-          <div className="container">
-            <div className="empty-box">
-              <h2>
-                🔐 Test शुरू करने
-                के लिए Login जरूरी है
-              </h2>
-
-              <p>
-                कृपया पहले Mobile Number
-                से Login करें।
-              </p>
-
-              <button
-                className="open-btn"
-                onClick={
-                  login
-                }
-              >
-                📱 Mobile Login करें
-              </button>
-
-              <button
-                className="back"
-                onClick={() =>
-                  setPage(
-                    "tests"
-                  )
-                }
-              >
-                ← वापस जाएँ
-              </button>
-            </div>
-          </div>
-        </div>
+        <LoginRequired
+          onLogin={
+            openUserLogin
+          }
+          onBack={() =>
+            setPage(
+              "tests"
+            )
+          }
+        />
       );
     }
 
@@ -2853,526 +2583,662 @@ export default function App() {
   // ====================================================
 
   return (
-    <>
-      <div className="app">
+    <div className="app">
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
-        <header className="header">
-          <div className="header-inner">
+      <header className="header">
+        <div className="header-inner">
 
-            <div
-              className="logo"
+          <div
+            className="logo"
+            onClick={
+              goHome
+            }
+          >
+            <div className="logo-icon">
+              📚
+            </div>
+
+            <div className="logo-text">
+              <h2>
+                Exam Test
+              </h2>
+
+              <span>
+                Learn Today |
+                Lead Tomorrow
+              </span>
+            </div>
+          </div>
+
+          <nav className="nav">
+
+            <button
               onClick={
                 goHome
               }
             >
-              <div className="logo-icon">
-                📚
-              </div>
+              🏠 Home
+            </button>
 
-              <div className="logo-text">
-                <h2>
-                  Exam Test
-                </h2>
+            <button
+              onClick={() =>
+                requireUserLogin(
+                  () =>
+                    setPage(
+                      "resources"
+                    )
+                )
+              }
+            >
+              📚 Books
+            </button>
 
-                <span>
-                  Learn Today |
-                  Lead Tomorrow
-                </span>
-              </div>
-            </div>
-
-            <nav className="nav">
-
-              <button
-                onClick={
-                  goHome
-                }
-              >
-                🏠 Home
-              </button>
-
-              <button
-                onClick={() =>
-                  setPage(
-                    "resources"
-                  )
-                }
-              >
-                📚 Books
-              </button>
-
-              <button
-                onClick={() =>
-                  setPage(
-                    "current"
-                  )
-                }
-              >
-                📰 Current Affairs
-              </button>
-
-              <button
-                onClick={() =>
-                  setPage(
-                    "mcq"
-                  )
-                }
-              >
-                📝 MCQ
-              </button>
-
-              {/* ADMIN */}
-
-              <button
-                className="admin-btn"
-                onClick={
-                  openAdmin
-                }
-              >
-                👑 Admin Panel
-              </button>
-
-              {/* USER LOGIN */}
-
-              {user ? (
-                <button
-                  className="login-btn"
-                  onClick={
-                    logout
-                  }
-                  title={
-                    user.phoneNumber ||
-                    user.email ||
-                    ""
-                  }
-                >
-                  👤 Logout
-                </button>
-              ) : (
-                <button
-                  className="login-btn"
-                  onClick={
-                    login
-                  }
-                >
-                  📱 Mobile Login
-                </button>
-              )}
-
-            </nav>
-          </div>
-        </header>
-
-        {/* =================================================
-            MAIN
-        ================================================= */}
-
-        <main className="container">
-
-          {/* =================================================
-              HOME
-          ================================================= */}
-
-          {page ===
-            "home" && (
-            <>
-
-              <section className="hero">
-
-                <h1 className="exam-test-hero-title">
-                  <span>
-                    Exam{" "}
-                  </span>
-
-                  <span>
-                    Test
-                  </span>
-                </h1>
-
-                <p>
-                  प्रतियोगी परीक्षाओं
-                  की तैयारी के लिए
-                  एक ही प्लेटफॉर्म
-                </p>
-
-                <div className="search">
-
-                  <input
-                    placeholder="आप क्या पढ़ना चाहते हैं?"
-                  />
-
-                  <button>
-                    🔎 खोजें
-                  </button>
-
-                </div>
-              </section>
-
-              {/* EXAMS */}
-
-              <div className="section-title">
-
-                <h2>
-                  🎯 All Exam Test
-                  Series
-                </h2>
-
-                <p>
-                  सभी प्रमुख
-                  प्रतियोगी परीक्षाओं
-                  के लिए Test Series
-                </p>
-
-              </div>
-
-              <div className="exam-grid">
-
-                {exams.map(
-                  (exam) => (
-                    <div
-                      className="exam-card"
-                      key={
-                        exam.id
-                      }
-                      style={{
-                        background:
-                          exam.color,
-                      }}
-                    >
-
-                      <div className="exam-icon">
-                        {
-                          exam.icon
-                        }
-                      </div>
-
-                      <h3>
-                        {
-                          exam.name
-                        }
-                      </h3>
-
-                      <p>
-                        {
-                          exam.description
-                        }
-                      </p>
-
-                      <span className="paid">
-                        Test Series
-                      </span>
-
-                      <button
-                        className="open-btn"
-                        onClick={() =>
-                          openExam(
-                            exam
-                          )
-                        }
-                      >
-                        Test Series →
-                      </button>
-
-                    </div>
-                  )
-                )}
-
-              </div>
-
-              {/* RESOURCES */}
-
-              <div className="section-title">
-
-                <h2>
-                  📚 Study Resources
-                </h2>
-
-                <p>
-                  परीक्षा की तैयारी
-                  के लिए सभी आवश्यक
-                  सामग्री
-                </p>
-
-              </div>
-
-              <div className="resource-grid">
-
-                {visibleResources.map(
-                  (
-                    item,
-                    index
-                  ) => (
-                    <div
-                      className="resource-card"
-                      key={
-                        item.id ||
-                        index
-                      }
-                    >
-
-                      <div className="icon">
-                        {
-                          item.icon
-                        }
-                      </div>
-
-                      <h3>
-                        {
-                          item.title
-                        }
-                      </h3>
-
-                      <p>
-                        {
-                          item.text
-                        }
-                      </p>
-
-                      <button
-                        className="open-btn"
-                        onClick={() => {
-
-                          if (
-                            item.page ===
-                            "tests"
-                          ) {
-                            openExam(
-                              exams[0]
-                            );
-                          } else {
-                            setPage(
-                              item.page ||
-                                "resources"
-                            );
-                          }
-
-                        }}
-                      >
-                        Open →
-                      </button>
-
-                    </div>
-                  )
-                )}
-
-              </div>
-
-              {/* CURRENT AFFAIRS */}
-
-              <div className="blue-box">
-
-                <h2>
-                  📰 Daily Current
-                  Affairs Quiz
-                </h2>
-
-                <p>
-                  आज के महत्वपूर्ण
-                  Current Affairs पर
-                  आधारित MCQ
-                </p>
-
-                <button
-                  className="primary"
-                  onClick={() =>
+            <button
+              onClick={() =>
+                requireUserLogin(
+                  () =>
                     setPage(
                       "current"
                     )
-                  }
-                >
-                  आज का Quiz शुरू करें
-                </button>
+                )
+              }
+            >
+              📰 Current Affairs
+            </button>
 
-              </div>
-
-              {/* AI */}
-
-              <div className="blue-box">
-
-                <h2>
-                  🤖 AI MCQ Generator
-                </h2>
-
-                <p>
-                  परीक्षा और विषय
-                  चुनकर नए MCQ तैयार
-                  करें।
-                </p>
-
-                <button
-                  className="primary"
-                  onClick={() =>
+            <button
+              onClick={() =>
+                requireUserLogin(
+                  () =>
                     setPage(
                       "mcq"
                     )
-                  }
-                >
-                  MCQ Generator खोलें
+                )
+              }
+            >
+              📝 MCQ
+            </button>
+
+            {/* ADMIN */}
+
+            <button
+              className="admin-btn"
+              onClick={
+                openAdmin
+              }
+            >
+              👑 Admin Panel
+            </button>
+
+            {/* USER LOGIN */}
+
+            {user ? (
+              <button
+                className="login-btn"
+                onClick={
+                  logout
+                }
+                title={
+                  user.phoneNumber ||
+                  user.email ||
+                  "User"
+                }
+              >
+                👤 Logout
+              </button>
+            ) : (
+              <button
+                className="login-btn"
+                onClick={
+                  openUserLogin
+                }
+              >
+                📱 User Login
+              </button>
+            )}
+
+          </nav>
+        </div>
+      </header>
+
+      {/* =================================================
+          MAIN
+      ================================================= */}
+
+      <main className="container">
+
+        {/* =================================================
+            HOME
+        ================================================= */}
+
+        {page === "home" && (
+          <>
+
+            <section className="hero">
+
+              <h1 className="exam-test-hero-title">
+                <span>
+                  Exam{" "}
+                </span>
+
+                <span>
+                  Test
+                </span>
+              </h1>
+
+              <p>
+                प्रतियोगी परीक्षाओं
+                की तैयारी के लिए
+                एक ही प्लेटफॉर्म
+              </p>
+
+              <div className="search">
+
+                <input
+                  placeholder="आप क्या पढ़ना चाहते हैं?"
+                />
+
+                <button>
+                  🔎 खोजें
                 </button>
 
               </div>
+            </section>
 
+            {/* EXAMS */}
+
+            <div className="section-title">
+
+              <h2>
+                🎯 All Exam Test
+                Series
+              </h2>
+
+              <p>
+                सभी प्रमुख
+                प्रतियोगी परीक्षाओं
+                के लिए Test Series
+              </p>
+
+            </div>
+
+            <div className="exam-grid">
+
+              {exams.map(
+                (exam) => (
+                  <div
+                    className="exam-card"
+                    key={
+                      exam.id
+                    }
+                    style={{
+                      background:
+                        exam.color,
+                    }}
+                  >
+
+                    <div className="exam-icon">
+                      {
+                        exam.icon
+                      }
+                    </div>
+
+                    <h3>
+                      {
+                        exam.name
+                      }
+                    </h3>
+
+                    <p>
+                      {
+                        exam.description
+                      }
+                    </p>
+
+                    <span className="paid">
+                      Test Series
+                    </span>
+
+                    <button
+                      className="open-btn"
+                      onClick={() =>
+                        openExam(
+                          exam
+                        )
+                      }
+                    >
+                      Test Series →
+                    </button>
+
+                  </div>
+                )
+              )}
+
+            </div>
+
+            {/* RESOURCES */}
+
+            <div className="section-title">
+
+              <h2>
+                📚 Study Resources
+              </h2>
+
+              <p>
+                परीक्षा की तैयारी
+                के लिए सभी आवश्यक
+                सामग्री
+              </p>
+
+            </div>
+
+            <div className="resource-grid">
+
+              {visibleResources.map(
+                (
+                  item,
+                  index
+                ) => (
+                  <div
+                    className="resource-card"
+                    key={
+                      item.id ||
+                      index
+                    }
+                  >
+
+                    <div className="icon">
+                      {
+                        item.icon
+                      }
+                    </div>
+
+                    <h3>
+                      {
+                        item.title
+                      }
+                    </h3>
+
+                    <p>
+                      {
+                        item.text
+                      }
+                    </p>
+
+                    <button
+                      className="open-btn"
+                      onClick={() => {
+
+                        requireUserLogin(
+                          () => {
+
+                            if (
+                              item.page ===
+                              "tests"
+                            ) {
+                              openExam(
+                                exams[0]
+                              );
+                            } else {
+                              setPage(
+                                item.page ||
+                                  "resources"
+                              );
+                            }
+
+                          }
+                        );
+
+                      }}
+                    >
+                      Open →
+                    </button>
+
+                  </div>
+                )
+              )}
+
+            </div>
+
+            {/* CURRENT AFFAIRS */}
+
+            <div className="blue-box">
+
+              <h2>
+                📰 Daily Current
+                Affairs Quiz
+              </h2>
+
+              <p>
+                आज के महत्वपूर्ण
+                Current Affairs पर
+                आधारित MCQ
+              </p>
+
+              <button
+                className="primary"
+                onClick={() =>
+                  requireUserLogin(
+                    () =>
+                      setPage(
+                        "current"
+                      )
+                  )
+                }
+              >
+                आज का Quiz शुरू करें
+              </button>
+
+            </div>
+
+            {/* AI */}
+
+            <div className="blue-box">
+
+              <h2>
+                🤖 AI MCQ Generator
+              </h2>
+
+              <p>
+                परीक्षा और विषय
+                चुनकर नए MCQ तैयार
+                करें।
+              </p>
+
+              <button
+                className="primary"
+                onClick={() =>
+                  requireUserLogin(
+                    () =>
+                      setPage(
+                        "mcq"
+                      )
+                  )
+                }
+              >
+                MCQ Generator खोलें
+              </button>
+
+            </div>
+
+          </>
+        )}
+
+        {/* =================================================
+            TEST LIST
+        ================================================= */}
+
+        {page === "tests" &&
+          selectedExam && (
+            <>
+              {!user ? (
+                <LoginRequired
+                  onLogin={
+                    openUserLogin
+                  }
+                  onBack={
+                    goHome
+                  }
+                />
+              ) : (
+                <>
+                  <button
+                    className="back"
+                    onClick={
+                      goHome
+                    }
+                  >
+                    ← Home पर वापस जाएँ
+                  </button>
+
+                  <div className="page-title">
+
+                    <div className="big-icon">
+                      {
+                        selectedExam.icon
+                      }
+                    </div>
+
+                    <h1>
+                      {
+                        selectedExam.name
+                      }{" "}
+                      Test Series
+                    </h1>
+
+                    <p>
+                      {
+                        selectedExam.description
+                      }
+                    </p>
+
+                  </div>
+
+                  <div className="test-grid">
+
+                    {Object.entries(
+                      publicTests
+                    )
+                      .filter(
+                        ([, test]) =>
+                          test.exam ===
+                          selectedExam.id
+                      )
+                      .sort(
+                        (a, b) =>
+                          Number(
+                            a[1]
+                              .testNumber ||
+                              0
+                          ) -
+                          Number(
+                            b[1]
+                              .testNumber ||
+                              0
+                          )
+                      )
+                      .map(
+                        (
+                          [id, test]
+                        ) => (
+                          <div
+                            className="test-card"
+                            key={
+                              id
+                            }
+                          >
+
+                            <h3>
+                              {
+                                test.title
+                              }
+                            </h3>
+
+                            <p>
+                              {
+                                test
+                                  .questions
+                                  ?.length ||
+                                0
+                              }{" "}
+                              MCQ Questions
+                            </p>
+
+                            <div className="price">
+                              {Number(
+                                test.price ||
+                                  0
+                              ) === 0
+                                ? "FREE"
+                                : `₹${test.price}`}
+                            </div>
+
+                            <button
+                              onClick={() =>
+                                openTest(
+                                  test
+                                )
+                              }
+                            >
+                              Start Test
+                            </button>
+
+                          </div>
+                        )
+                      )}
+
+                  </div>
+
+                  {Object.entries(
+                    publicTests
+                  ).filter(
+                    ([, test]) =>
+                      test.exam ===
+                      selectedExam.id
+                  ).length ===
+                    0 && (
+                    <div className="empty-box">
+
+                      <div>
+                        📚
+                      </div>
+
+                      <h2>
+                        अभी कोई Public
+                        Test नहीं है
+                      </h2>
+
+                      <p>
+                        इस परीक्षा के Test
+                        जल्द ही उपलब्ध होंगे।
+                      </p>
+
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
 
-          {/* =================================================
-              TEST LIST
-          ================================================= */}
+        {/* =================================================
+            RESOURCES
+        ================================================= */}
 
-          {page ===
-            "tests" &&
-            selectedExam && (
+        {page === "resources" && (
+          <>
+            {!user ? (
+              <LoginRequired
+                onLogin={
+                  openUserLogin
+                }
+                onBack={
+                  goHome
+                }
+              />
+            ) : (
               <>
-
                 <button
                   className="back"
                   onClick={
                     goHome
                   }
                 >
-                  ← Home पर वापस जाएँ
+                  ← Home
                 </button>
 
                 <div className="page-title">
 
                   <div className="big-icon">
-                    {
-                      selectedExam.icon
-                    }
+                    📚
                   </div>
 
                   <h1>
-                    {
-                      selectedExam.name
-                    }{" "}
-                    Test Series
+                    Study Resources
                   </h1>
 
                   <p>
-                    {
-                      selectedExam.description
-                    }
+                    NCERT, Books और
+                    परीक्षा उपयोगी
+                    अध्ययन सामग्री
                   </p>
 
                 </div>
 
-                <div className="test-grid">
+                <div className="resource-grid">
 
-                  {Object.entries(
-                    publicTests
-                  )
-                    .filter(
-                      ([, test]) =>
-                        test.exam ===
-                        selectedExam.id
-                    )
-                    .sort(
-                      (a, b) =>
-                        Number(
-                          a[1]
-                            .testNumber ||
-                            0
-                        ) -
-                        Number(
-                          b[1]
-                            .testNumber ||
-                            0
-                        )
-                    )
-                    .map(
-                      (
-                        [id, test]
-                      ) => (
-                        <div
-                          className="test-card"
-                          key={
-                            id
+                  {visibleResources.map(
+                    (
+                      item,
+                      index
+                    ) => (
+                      <div
+                        className="resource-card"
+                        key={
+                          item.id ||
+                          index
+                        }
+                      >
+
+                        <div className="icon">
+                          {
+                            item.icon
                           }
-                        >
-
-                          <h3>
-                            {
-                              test.title
-                            }
-                          </h3>
-
-                          <p>
-                            {
-                              test
-                                .questions
-                                ?.length ||
-                              0
-                            }{" "}
-                            MCQ Questions
-                          </p>
-
-                          <div className="price">
-                            {Number(
-                              test.price ||
-                                0
-                            ) === 0
-                              ? "FREE"
-                              : `₹${test.price}`}
-                          </div>
-
-                          <button
-                            onClick={() =>
-                              openTest(
-                                test
-                              )
-                            }
-                          >
-                            Start Test
-                          </button>
-
                         </div>
-                      )
-                    )}
+
+                        <h3>
+                          {
+                            item.title
+                          }
+                        </h3>
+
+                        <p>
+                          {
+                            item.text
+                          }
+                        </p>
+
+                      </div>
+                    )
+                  )}
 
                 </div>
-
-                {Object.entries(
-                  publicTests
-                ).filter(
-                  ([, test]) =>
-                    test.exam ===
-                    selectedExam.id
-                ).length ===
-                  0 && (
-                  <div className="empty-box">
-
-                    <div>
-                      📚
-                    </div>
-
-                    <h2>
-                      अभी कोई Public
-                      Test नहीं है
-                    </h2>
-
-                    <p>
-                      इस परीक्षा के Test
-                      जल्द ही उपलब्ध होंगे।
-                    </p>
-
-                  </div>
-                )}
-
               </>
             )}
+          </>
+        )}
 
-          {/* =================================================
-              RESOURCES
-          ================================================= */}
+        {/* =================================================
+            CURRENT AFFAIRS
+        ================================================= */}
 
-          {page ===
-            "resources" && (
+        {page === "current" && (
+          user ? (
+            <CurrentAffairs
+              onBack={goHome}
+            />
+          ) : (
+            <LoginRequired
+              onLogin={
+                openUserLogin
+              }
+              onBack={
+                goHome
+              }
+            />
+          )
+        )}
+
+        {/* =================================================
+            MCQ
+        ================================================= */}
+
+        {page === "mcq" && (
+          user ? (
             <>
-
               <button
                 className="back"
                 onClick={
@@ -3382,123 +3248,48 @@ export default function App() {
                 ← Home
               </button>
 
-              <div className="page-title">
-
-                <div className="big-icon">
-                  📚
-                </div>
-
-                <h1>
-                  Study Resources
-                </h1>
-
-                <p>
-                  NCERT, Books और
-                  परीक्षा उपयोगी
-                  अध्ययन सामग्री
-                </p>
-
-              </div>
-
-              <div className="resource-grid">
-
-                {visibleResources.map(
-                  (
-                    item,
-                    index
-                  ) => (
-                    <div
-                      className="resource-card"
-                      key={
-                        item.id ||
-                        index
-                      }
-                    >
-
-                      <div className="icon">
-                        {
-                          item.icon
-                        }
-                      </div>
-
-                      <h3>
-                        {
-                          item.title
-                        }
-                      </h3>
-
-                      <p>
-                        {
-                          item.text
-                        }
-                      </p>
-
-                    </div>
-                  )
-                )}
-
-              </div>
-
-            </>
-          )}
-
-          {/* =================================================
-              CURRENT AFFAIRS
-          ================================================= */}
-
-          {page === "current" && (
-            <CurrentAffairs
-              onBack={goHome}
-            />
-          )}
-
-          {/* =================================================
-              MCQ / AI MCQ GENERATOR
-          ================================================= */}
-
-          {page === "mcq" && (
-            <>
-              <button
-                className="back"
-                onClick={goHome}
-              >
-                ← Home
-              </button>
-
               <AIMCQGenerator />
             </>
-          )}
+          ) : (
+            <LoginRequired
+              onLogin={
+                openUserLogin
+              }
+              onBack={
+                goHome
+              }
+            />
+          )
+        )}
 
-        </main>
+      </main>
 
-        {/* =================================================
-            FOOTER
-        ================================================= */}
+      {/* =================================================
+          FOOTER
+      ================================================= */}
 
-        <footer className="footer">
+      <footer className="footer">
 
-          <h2>
-            📚 Exam Test
-          </h2>
+        <h2>
+          📚 Exam Test
+        </h2>
 
-          <p>
-            Learn Today |
-            Lead Tomorrow
-          </p>
+        <p>
+          Learn Today |
+          Lead Tomorrow
+        </p>
 
-          <p
-            style={{
-              marginTop:
-                "15px",
-            }}
-          >
-            © 2026 Exam Test.
-            All Rights Reserved.
-          </p>
+        <p
+          style={{
+            marginTop: "15px",
+          }}
+        >
+          © 2026 Exam Test.
+          All Rights Reserved.
+        </p>
 
-        </footer>
+      </footer>
 
-      </div>
-    </>
+    </div>
   );
 }
