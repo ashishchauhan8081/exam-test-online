@@ -1,7 +1,6 @@
 import React, {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -15,27 +14,30 @@ import {
 
 import {
   getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
   signOut,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  sendPasswordResetEmail,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from "firebase/auth";
 
 import {
   getDatabase,
   ref,
   onValue,
+  set,
 } from "firebase/database";
 
 import firebaseConfig from "./firebase-config.json";
 
+// ======================================================
+// COMPONENTS
+// ======================================================
+
 import AdminPanel from "./components/AdminPanel";
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
+import PasswordResetAdmin from "./components/PasswordResetAdmin";
 
 // ======================================================
 // FIREBASE
@@ -52,13 +54,10 @@ const firebaseApp = getApps().length
 
 const auth = getAuth(firebaseApp);
 
-const googleProvider =
-  new GoogleAuthProvider();
-
 const db = getDatabase(firebaseApp);
 
 // ======================================================
-// ADMIN EMAIL
+// ADMIN
 // ======================================================
 
 const ADMIN_EMAIL =
@@ -74,96 +73,84 @@ const exams = [
     name: "UPSC",
     icon: "🇮🇳",
     color: "#fee2e2",
-    description:
-      "UPSC Civil Services परीक्षा स्तर",
+    description: "UPSC Civil Services परीक्षा स्तर",
   },
   {
     id: "uppcs",
     name: "UPPCS",
     icon: "🏛️",
     color: "#fef3c7",
-    description:
-      "UPPCS परीक्षा स्तर",
+    description: "UPPCS परीक्षा स्तर",
   },
   {
     id: "uppet",
     name: "UP PET",
     icon: "🎯",
     color: "#dcfce7",
-    description:
-      "UP PET परीक्षा स्तर",
+    description: "UP PET परीक्षा स्तर",
   },
   {
     id: "bpsc",
     name: "BPSC",
     icon: "🏛️",
     color: "#ede9fe",
-    description:
-      "BPSC परीक्षा स्तर",
+    description: "BPSC परीक्षा स्तर",
   },
   {
     id: "mppsc",
     name: "MPPSC",
     icon: "📚",
     color: "#dbeafe",
-    description:
-      "MPPSC परीक्षा स्तर",
+    description: "MPPSC परीक्षा स्तर",
   },
   {
     id: "ssc",
     name: "SSC",
     icon: "📝",
     color: "#fce7f3",
-    description:
-      "SSC परीक्षा स्तर",
+    description: "SSC परीक्षा स्तर",
   },
   {
     id: "railway",
     name: "Railway",
     icon: "🚆",
     color: "#e0f2fe",
-    description:
-      "Railway / RRB परीक्षा स्तर",
+    description: "Railway / RRB परीक्षा स्तर",
   },
   {
     id: "banking",
     name: "Banking",
     icon: "🏦",
     color: "#dcfce7",
-    description:
-      "Banking परीक्षा स्तर",
+    description: "Banking परीक्षा स्तर",
   },
   {
     id: "upsssc",
     name: "UPSSSC",
     icon: "📖",
     color: "#f3e8ff",
-    description:
-      "UPSSSC परीक्षा स्तर",
+    description: "UPSSSC परीक्षा स्तर",
   },
   {
     id: "roaro",
     name: "RO/ARO",
     icon: "📜",
     color: "#fef3c7",
-    description:
-      "RO / ARO परीक्षा स्तर",
+    description: "RO / ARO परीक्षा स्तर",
   },
   {
     id: "police",
     name: "Police",
     icon: "👮",
     color: "#fee2e2",
-    description:
-      "Police परीक्षा स्तर",
+    description: "Police परीक्षा स्तर",
   },
   {
     id: "teaching",
     name: "Teaching",
     icon: "👨‍🏫",
     color: "#dbeafe",
-    description:
-      "Teaching परीक्षा स्तर",
+    description: "Teaching परीक्षा स्तर",
   },
 ];
 
@@ -176,8 +163,7 @@ const defaultResources = [
     id: "1",
     icon: "📚",
     title: "NCERT Books",
-    text:
-      "कक्षा 6 से 12 तक की NCERT पुस्तकों का अध्ययन करें।",
+    text: "कक्षा 6 से 12 तक की NCERT पुस्तकों का अध्ययन करें।",
     page: "resources",
     enabled: true,
   },
@@ -185,8 +171,7 @@ const defaultResources = [
     id: "2",
     icon: "📰",
     title: "Current Affairs",
-    text:
-      "प्रतिदिन के महत्वपूर्ण Current Affairs पढ़ें।",
+    text: "प्रतिदिन के महत्वपूर्ण Current Affairs पढ़ें।",
     page: "current",
     enabled: true,
   },
@@ -194,8 +179,7 @@ const defaultResources = [
     id: "3",
     icon: "📝",
     title: "MCQ Practice",
-    text:
-      "विषयवार महत्वपूर्ण MCQ का अभ्यास करें।",
+    text: "विषयवार महत्वपूर्ण MCQ का अभ्यास करें।",
     page: "mcq",
     enabled: true,
   },
@@ -203,8 +187,7 @@ const defaultResources = [
     id: "4",
     icon: "📖",
     title: "Previous Year Questions",
-    text:
-      "पिछली परीक्षाओं के प्रश्नों का अभ्यास करें।",
+    text: "पिछली परीक्षाओं के प्रश्नों का अभ्यास करें।",
     page: "resources",
     enabled: true,
   },
@@ -212,8 +195,7 @@ const defaultResources = [
     id: "5",
     icon: "🎯",
     title: "Test Series",
-    text:
-      "सभी प्रमुख प्रतियोगी परीक्षाओं की Test Series।",
+    text: "सभी प्रमुख प्रतियोगी परीक्षाओं की Test Series।",
     page: "tests",
     enabled: true,
   },
@@ -221,8 +203,7 @@ const defaultResources = [
     id: "6",
     icon: "🤖",
     title: "AI MCQ Generator",
-    text:
-      "AI की सहायता से नए MCQ तैयार करें।",
+    text: "AI की सहायता से नए MCQ तैयार करें।",
     page: "mcq",
     enabled: true,
   },
@@ -267,14 +248,11 @@ function normalizeQuestions(questions) {
 // ======================================================
 
 function getCorrectIndex(question) {
-  const options = Array.isArray(
-    question?.options
-  )
+  const options = Array.isArray(question?.options)
     ? question.options
     : [];
 
-  const answer =
-    question?.answer;
+  const answer = question?.answer;
 
   if (
     !options.length ||
@@ -303,8 +281,7 @@ function getCorrectIndex(question) {
     }
   }
 
-  const raw =
-    String(answer).trim();
+  const raw = String(answer).trim();
 
   if (!raw) {
     return -1;
@@ -328,10 +305,9 @@ function getCorrectIndex(question) {
     }
   }
 
-  const letterMatch =
-    raw.match(
-      /^([ABCD])(?:\s*[.\):-]|\s*$)/i
-    );
+  const letterMatch = raw.match(
+    /^([ABCD])(?:\s*[.\):-]|\s*$)/i
+  );
 
   if (letterMatch) {
     const idx =
@@ -347,22 +323,18 @@ function getCorrectIndex(question) {
     }
   }
 
-  const cleaned =
-    raw
-      .replace(
-        /^[ABCD]\s*[.\):-]\s*/i,
-        ""
-      )
-      .trim();
+  const cleaned = raw
+    .replace(
+      /^[ABCD]\s*[.\):-]\s*/i,
+      ""
+    )
+    .trim();
 
-  const exact =
-    options.findIndex(
-      (option) =>
-        String(option ?? "").trim() ===
-          raw ||
-        String(option ?? "").trim() ===
-          cleaned
-    );
+  const exact = options.findIndex(
+    (option) =>
+      String(option ?? "").trim() === raw ||
+      String(option ?? "").trim() === cleaned
+  );
 
   if (exact >= 0) {
     return exact;
@@ -374,517 +346,601 @@ function getCorrectIndex(question) {
       .trim()
       .toLowerCase();
 
-  const loose =
-    options.findIndex(
-      (option) =>
-        compact(option) ===
-        compact(cleaned)
-    );
+  const loose = options.findIndex(
+    (option) =>
+      compact(option) === compact(cleaned)
+  );
 
-  return loose >= 0
-    ? loose
-    : -1;
+  return loose >= 0 ? loose : -1;
 }
 
 // ======================================================
-// USER MOBILE LOGIN
+// USER ACCOUNT HELPERS
 // ======================================================
 
-function UserLogin({
+// Firebase Email/Password Auth needs an email identifier.
+// Users never see this value; they log in only with mobile + password.
+function mobileToAuthEmail(mobile) {
+  return `${String(mobile).replace(/\D/g, "")}@studywithpower.app`;
+}
+
+function normalizeMobile(value) {
+  return String(value || "").replace(/\D/g, "").slice(-10);
+}
+
+// ======================================================
+// USER REGISTRATION
+// ======================================================
+
+function RegisterPage({
   onSuccess,
+  onLogin,
   onClose,
 }) {
-  const [phone, setPhone] =
-    useState("");
+  const [name, setName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [otp, setOtp] =
-    useState("");
+  const handleRegister = async (e) => {
+    e.preventDefault();
 
-  const [confirmationResult, setConfirmationResult] =
-    useState(null);
+    const cleanMobile = normalizeMobile(mobile);
 
-  const [loading, setLoading] =
-    useState(false);
+    if (!name.trim()) {
+      alert("कृपया अपना नाम डालें।");
+      return;
+    }
 
-  const [otpSent, setOtpSent] =
-    useState(false);
+    if (!/^\d{10}$/.test(cleanMobile)) {
+      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      return;
+    }
 
-  const recaptchaRef =
-    useRef(null);
-
-  const createRecaptcha =
-    () => {
-      if (
-        recaptchaRef.current
-      ) {
-        return recaptchaRef.current;
-      }
-
-      recaptchaRef.current =
-        new RecaptchaVerifier(
-          auth,
-          "recaptcha-container",
-          {
-            size: "normal",
-            callback: () => {
-              console.log(
-                "reCAPTCHA verified"
-              );
-            },
-            "expired-callback": () => {
-              recaptchaRef.current =
-                null;
-            },
-          }
-        );
-
-      return recaptchaRef.current;
-    };
-
-  const sendOTP = async () => {
-    const cleanPhone =
-      phone.replace(
-        /\D/g,
-        ""
-      );
-
-    if (
-      cleanPhone.length !== 10
-    ) {
-      alert(
-        "कृपया 10 अंकों का Mobile Number डालें।"
-      );
+    if (password.length < 6) {
+      alert("Password कम से कम 6 characters का होना चाहिए।");
       return;
     }
 
     try {
       setLoading(true);
 
-      const formattedPhone =
-        `+91${cleanPhone}`;
+      const authEmail = mobileToAuthEmail(cleanMobile);
 
-      const appVerifier =
-        createRecaptcha();
-
-      const result =
-        await signInWithPhoneNumber(
-          auth,
-          formattedPhone,
-          appVerifier
-        );
-
-      setConfirmationResult(
-        result
+      const result = await createUserWithEmailAndPassword(
+        auth,
+        authEmail,
+        password
       );
 
-      setOtpSent(true);
+      const newUser = result.user;
 
-      alert(
-        "✅ OTP आपके Mobile Number पर भेज दिया गया है।"
-      );
-    } catch (error) {
-      console.error(
-        "Phone Login Error:",
-        error
-      );
+      await updateProfile(newUser, {
+        displayName: name.trim(),
+      });
 
-      if (
-        recaptchaRef.current
-      ) {
-        try {
-          recaptchaRef.current.clear();
-        } catch {}
-        recaptchaRef.current =
-          null;
-      }
+      await set(ref(db, `users/${newUser.uid}`), {
+        uid: newUser.uid,
+        name: name.trim(),
+        mobile: cleanMobile,
+        authEmail,
+        preparation: "",
+        createdAt: new Date().toISOString(),
+      });
 
-      if (
-        error.code ===
-        "auth/invalid-phone-number"
-      ) {
-        alert(
-          "❌ Mobile Number गलत है।"
-        );
-      } else if (
-        error.code ===
-        "auth/too-many-requests"
-      ) {
-        alert(
-          "❌ बहुत ज्यादा प्रयास हुए हैं। कुछ समय बाद फिर कोशिश करें।"
-        );
-      } else if (
-        error.code ===
-        "auth/quota-exceeded"
-      ) {
-        alert(
-          "❌ Firebase SMS quota समाप्त हो गया है।"
-        );
-      } else {
-        alert(
-          "❌ OTP भेजने में समस्या:\n" +
-            error.message
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyOTP = async () => {
-    if (
-      !confirmationResult
-    ) {
-      alert(
-        "पहले OTP भेजें।"
-      );
-      return;
-    }
-
-    if (
-      otp.trim().length < 6
-    ) {
-      alert(
-        "कृपया 6 अंकों का OTP डालें।"
-      );
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      const result =
-        await confirmationResult.confirm(
-          otp.trim()
-        );
-
-      alert(
-        "✅ User Login सफल हुआ।"
-      );
+      // Mobile index is useful for server-side password reset lookup.
+      await set(ref(db, `mobileUsers/${cleanMobile}`), {
+        uid: newUser.uid,
+        name: name.trim(),
+        mobile: cleanMobile,
+        authEmail,
+        createdAt: new Date().toISOString(),
+      });
 
       if (onSuccess) {
-        onSuccess(
-          result.user
-        );
+        onSuccess(newUser);
       }
     } catch (error) {
-      console.error(
-        "OTP Verify Error:",
-        error
-      );
+      console.error("Registration Error:", error);
 
-      if (
-        error.code ===
-        "auth/invalid-verification-code"
-      ) {
-        alert(
-          "❌ OTP गलत है।"
-        );
-      } else if (
-        error.code ===
-        "auth/code-expired"
-      ) {
-        alert(
-          "❌ OTP expire हो गया है। नया OTP भेजें।"
-        );
+      if (error.code === "auth/email-already-in-use") {
+        alert("❌ यह Mobile Number पहले से registered है।");
+      } else if (error.code === "auth/weak-password") {
+        alert("❌ Password बहुत कमजोर है।");
       } else {
-        alert(
-          "❌ OTP Verify Error:\n" +
-            error.message
-        );
+        alert("❌ Registration Error:\n" + error.message);
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const changeNumber = () => {
-    setOtpSent(false);
-    setOtp("");
-    setConfirmationResult(null);
-
-    if (
-      recaptchaRef.current
-    ) {
-      try {
-        recaptchaRef.current.clear();
-      } catch {}
-      recaptchaRef.current =
-        null;
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "20px",
-        background:
-          "linear-gradient(135deg,#eff6ff,#ffffff,#eef2ff)",
-        fontFamily:
-          "Arial, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "430px",
-          background: "#fff",
-          borderRadius: "22px",
-          padding: "30px",
-          boxShadow:
-            "0 15px 45px rgba(0,0,0,.15)",
-        }}
-      >
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "25px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "55px",
-            }}
-          >
-            📱
-          </div>
+    <div className="auth-overlay">
+      <div className="auth-card">
+        <div className="auth-icon">📱</div>
 
-          <h1
-            style={{
-              margin: "10px 0",
-              color: "#1264d8",
-            }}
-          >
-            User Login
-          </h1>
+        <h1>Create Account</h1>
+        <p>अपना Exam Test account बनाएं</p>
 
-          <p
-            style={{
-              color: "#64748b",
-              fontSize: "16px",
-            }}
+        <form onSubmit={handleRegister}>
+          <label>👤 पूरा नाम</label>
+          <input
+            type="text"
+            placeholder="अपना नाम दर्ज करें"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+
+          <label>📱 Mobile Number</label>
+          <input
+            type="tel"
+            inputMode="numeric"
+            maxLength="10"
+            placeholder="10 digit mobile number"
+            value={mobile}
+            onChange={(e) =>
+              setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+            }
+          />
+
+          <label>🔐 Password बनाएं</label>
+          <input
+            type="password"
+            placeholder="कम से कम 6 characters"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="auth-primary-btn"
           >
-            Mobile Number से Login करें
-          </p>
+            {loading ? "⏳ Account बन रहा है..." : "✅ Account बनाएं"}
+          </button>
+        </form>
+
+        <div className="auth-switch">
+          Account पहले से है?
+          <button type="button" onClick={onLogin}>
+            Login करें
+          </button>
         </div>
 
-        {!otpSent ? (
-          <>
-            <label
-              style={{
-                display: "block",
-                fontWeight: "700",
-                marginBottom: "8px",
-              }}
-            >
-              📱 Mobile Number
-            </label>
+        <button type="button" className="auth-close-btn" onClick={onClose}>
+          ← Website पर वापस जाएँ
+        </button>
+      </div>
+    </div>
+  );
+}
 
-            <div
-              style={{
-                display: "flex",
-                marginBottom: "18px",
-              }}
-            >
-              <div
+// ======================================================
+// EXAM SELECTION AFTER ACCOUNT CREATION
+// ======================================================
+
+function ExamSelectionPage({
+  user,
+  onComplete,
+  onClose,
+}) {
+  const [selected, setSelected] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleContinue = async () => {
+    if (!selected) {
+      alert("कृपया बताएं कि आप किस परीक्षा की तैयारी कर रहे हैं।");
+      return;
+    }
+
+    if (!user?.uid) {
+      alert("❌ User session नहीं मिला। फिर से Login करें।");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      await set(ref(db, `users/${user.uid}/preparation`), selected);
+
+      if (onComplete) {
+        onComplete({
+          ...user,
+          preparation: selected,
+        });
+      }
+    } catch (error) {
+      console.error("Exam selection error:", error);
+      alert("❌ परीक्षा save नहीं हुई:\n" + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-overlay">
+      <div className="auth-card" style={{ maxWidth: "620px" }}>
+        <div className="auth-icon">🎯</div>
+
+        <h1>आप किस परीक्षा की तैयारी कर रहे हैं?</h1>
+        <p>अपनी परीक्षा चुनें</p>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: "12px",
+            marginTop: "20px",
+          }}
+        >
+          {exams.map((exam) => {
+            const active = selected === exam.name;
+
+            return (
+              <button
+                key={exam.id}
+                type="button"
+                onClick={() => setSelected(exam.name)}
                 style={{
-                  padding: "13px 12px",
-                  background: "#f1f5f9",
-                  border:
-                    "1px solid #cbd5e1",
-                  borderRight: "none",
-                  borderRadius:
-                    "10px 0 0 10px",
-                  fontWeight: "700",
+                  border: active ? "3px solid #0877ed" : "1px solid #dbe3ee",
+                  background: active ? "#eff6ff" : "#fff",
+                  borderRadius: "14px",
+                  padding: "16px 8px",
+                  minHeight: "105px",
+                  cursor: "pointer",
+                  fontWeight: "800",
+                  color: "#0f2344",
+                  boxShadow: active ? "0 6px 20px rgba(0,119,237,.15)" : "none",
                 }}
               >
-                +91
-              </div>
-
-              <input
-                type="tel"
-                inputMode="numeric"
-                maxLength={10}
-                value={phone}
-                onChange={(e) =>
-                  setPhone(
-                    e.target.value.replace(
-                      /\D/g,
-                      ""
-                    )
-                  )
-                }
-                placeholder="10 digit mobile number"
-                style={{
-                  flex: 1,
-                  padding: "13px",
-                  border:
-                    "1px solid #cbd5e1",
-                  borderRadius:
-                    "0 10px 10px 0",
-                  fontSize: "17px",
-                  boxSizing:
-                    "border-box",
-                }}
-              />
-            </div>
-
-            <div
-              id="recaptcha-container"
-              style={{
-                marginBottom: "18px",
-              }}
-            />
-
-            <button
-              type="button"
-              disabled={loading}
-              onClick={sendOTP}
-              style={{
-                width: "100%",
-                padding: "14px",
-                border: "none",
-                borderRadius: "10px",
-                background:
-                  loading
-                    ? "#94a3b8"
-                    : "#1264d8",
-                color: "#fff",
-                fontSize: "17px",
-                fontWeight: "700",
-                cursor:
-                  loading
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {loading
-                ? "⏳ OTP भेजा जा रहा है..."
-                : "📲 OTP भेजें"}
-            </button>
-          </>
-        ) : (
-          <>
-            <div
-              style={{
-                background: "#eff6ff",
-                padding: "14px",
-                borderRadius: "10px",
-                marginBottom: "18px",
-                color: "#1e40af",
-              }}
-            >
-              📱 OTP भेजा गया:
-              <strong>
-                {" +91 "}
-                {phone}
-              </strong>
-            </div>
-
-            <label
-              style={{
-                display: "block",
-                fontWeight: "700",
-                marginBottom: "8px",
-              }}
-            >
-              🔢 OTP डालें
-            </label>
-
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={6}
-              value={otp}
-              onChange={(e) =>
-                setOtp(
-                  e.target.value.replace(
-                    /\D/g,
-                    ""
-                  )
-                )
-              }
-              placeholder="6 digit OTP"
-              style={{
-                width: "100%",
-                padding: "14px",
-                border:
-                  "1px solid #cbd5e1",
-                borderRadius: "10px",
-                fontSize: "20px",
-                letterSpacing: "5px",
-                textAlign: "center",
-                boxSizing:
-                  "border-box",
-                marginBottom: "15px",
-              }}
-            />
-
-            <button
-              type="button"
-              disabled={loading}
-              onClick={verifyOTP}
-              style={{
-                width: "100%",
-                padding: "14px",
-                border: "none",
-                borderRadius: "10px",
-                background:
-                  loading
-                    ? "#94a3b8"
-                    : "#16a34a",
-                color: "#fff",
-                fontSize: "17px",
-                fontWeight: "700",
-                cursor:
-                  loading
-                    ? "not-allowed"
-                    : "pointer",
-              }}
-            >
-              {loading
-                ? "⏳ Verify हो रहा है..."
-                : "✅ OTP Verify करें"}
-            </button>
-
-            <button
-              type="button"
-              onClick={changeNumber}
-              style={{
-                width: "100%",
-                marginTop: "12px",
-                padding: "12px",
-                border: "none",
-                borderRadius: "10px",
-                background: "#e2e8f0",
-                color: "#334155",
-                fontWeight: "700",
-              }}
-            >
-              ← Mobile Number बदलें
-            </button>
-          </>
-        )}
+                <div style={{ fontSize: "30px" }}>{exam.icon}</div>
+                <div style={{ marginTop: "7px" }}>{exam.name}</div>
+              </button>
+            );
+          })}
+        </div>
 
         <button
           type="button"
-          onClick={onClose}
-          style={{
-            width: "100%",
-            marginTop: "12px",
-            padding: "12px",
-            border: "none",
-            borderRadius: "10px",
-            background: "#f1f5f9",
-            color: "#334155",
-            fontSize: "16px",
-            fontWeight: "700",
-          }}
+          className="auth-primary-btn"
+          disabled={loading || !selected}
+          onClick={handleContinue}
+          style={{ marginTop: "20px" }}
         >
+          {loading ? "⏳ Save हो रहा है..." : "Continue →"}
+        </button>
+
+        <button type="button" className="auth-close-btn" onClick={onClose}>
           ← Website पर वापस जाएँ
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================
+// USER LOGIN - MOBILE + PASSWORD ONLY
+// ======================================================
+
+function LoginPage({
+  onSuccess,
+  onRegister,
+  onForgot,
+  onClose,
+}) {
+  const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    const cleanMobile = normalizeMobile(mobile);
+
+    if (!/^\d{10}$/.test(cleanMobile)) {
+      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      return;
+    }
+
+    if (!password) {
+      alert("Password डालें।");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const result = await signInWithEmailAndPassword(
+        auth,
+        mobileToAuthEmail(cleanMobile),
+        password
+      );
+
+      // A user account must not be allowed to enter Admin Panel as admin.
+      if (result.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        await signOut(auth);
+        alert("❌ Admin के लिए अलग Email + Password Login इस्तेमाल करें।");
+        return;
+      }
+
+      if (onSuccess) {
+        onSuccess(result.user);
+      }
+    } catch (error) {
+      console.error("User Login Error:", error);
+
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/user-not-found" ||
+        error.code === "auth/wrong-password"
+      ) {
+        alert("❌ Mobile Number या Password गलत है।");
+      } else {
+        alert("❌ Login Error:\n" + error.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-overlay">
+      <div className="auth-card">
+        <div className="auth-icon">📱</div>
+
+        <h1>User Login</h1>
+        <p>Mobile Number और Password से Login करें</p>
+
+        <form onSubmit={handleLogin}>
+          <label>📱 Mobile Number</label>
+          <input
+            type="tel"
+            inputMode="numeric"
+            maxLength="10"
+            placeholder="10 digit mobile number"
+            value={mobile}
+            onChange={(e) =>
+              setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+            }
+          />
+
+          <label>🔐 Password</label>
+          <input
+            type="password"
+            placeholder="अपना password डालें"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="auth-primary-btn"
+          >
+            {loading ? "⏳ Login हो रहा है..." : "🔐 Login"}
+          </button>
+        </form>
+
+        <button type="button" className="forgot-btn" onClick={onForgot}>
+          🔑 Forgot Password?
+        </button>
+
+        <div className="auth-switch">
+          नया account बनाना है?
+          <button type="button" onClick={onRegister}>
+            Create Account
+          </button>
+        </div>
+
+        <button type="button" className="auth-close-btn" onClick={onClose}>
+          ← Website पर वापस जाएँ
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================
+// USER FORGOT PASSWORD - REQUEST + OTP + NEW PASSWORD
+// ======================================================
+
+function ForgotPassword({ onBack }) {
+  const [step, setStep] = useState(1);
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const requestOtp = async (e) => {
+    e.preventDefault();
+    const cleanMobile = normalizeMobile(mobile);
+
+    if (!/^\d{10}$/.test(cleanMobile)) {
+      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const response = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request",
+          mobile: cleanMobile,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Request failed");
+      }
+
+      setMobile(cleanMobile);
+      setStep(2);
+      setMessage(
+        "✅ Request Admin Panel में भेज दिया गया है। Admin OTP Generate करके WhatsApp पर भेजेगा।"
+      );
+    } catch (error) {
+      console.error("Password reset request:", error);
+      alert("❌ " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyAndReset = async (e) => {
+    e.preventDefault();
+
+    if (!/^\d{6}$/.test(otp)) {
+      alert("6 अंकों का OTP डालें।");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      alert("नया Password कम से कम 6 characters का होना चाहिए।");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert("New Password और Confirm Password समान नहीं हैं।");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const response = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify",
+          mobile,
+          otp,
+          newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "OTP verification failed");
+      }
+
+      alert("✅ Password सफलतापूर्वक बदल दिया गया है। अब Mobile + Password से Login करें।");
+      onBack();
+    } catch (error) {
+      console.error("Password reset verify:", error);
+      alert("❌ " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-overlay">
+      <div className="auth-card">
+        <div className="auth-icon">🔑</div>
+
+        <h1>Forgot Password</h1>
+
+        {step === 1 ? (
+          <>
+            <p>Registered Mobile Number डालें</p>
+
+            <form onSubmit={requestOtp}>
+              <label>📱 Mobile Number</label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength="10"
+                placeholder="10 digit mobile number"
+                value={mobile}
+                onChange={(e) =>
+                  setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+                }
+              />
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="auth-primary-btn"
+              >
+                {loading ? "⏳ Request भेजा जा रहा है..." : "📲 Reset Request भेजें"}
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <p>WhatsApp से मिला OTP और नया Password डालें</p>
+
+            {message && (
+              <div
+                style={{
+                  marginBottom: "15px",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  background: "#ecfdf5",
+                  color: "#166534",
+                  fontWeight: "700",
+                }}
+              >
+                {message}
+              </div>
+            )}
+
+            <form onSubmit={verifyAndReset}>
+              <label>📱 Mobile Number</label>
+              <input type="tel" value={mobile} disabled />
+
+              <label>🔢 WhatsApp OTP</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength="6"
+                placeholder="6 digit OTP"
+                value={otp}
+                onChange={(e) =>
+                  setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+              />
+
+              <label>🔐 New Password</label>
+              <input
+                type="password"
+                placeholder="कम से कम 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+
+              <label>🔐 Confirm Password</label>
+              <input
+                type="password"
+                placeholder="Password दोबारा डालें"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="auth-primary-btn"
+              >
+                {loading ? "⏳ Password बदल रहा है..." : "✅ Password Reset करें"}
+              </button>
+            </form>
+          </>
+        )}
+
+        <button type="button" className="auth-close-btn" onClick={onBack}>
+          ← Login पर वापस जाएँ
         </button>
       </div>
     </div>
@@ -906,12 +962,6 @@ function AdminLogin({
     useState("");
 
   const [loading, setLoading] =
-    useState(false);
-
-  const [showForgot, setShowForgot] =
-    useState(false);
-
-  const [resetLoading, setResetLoading] =
     useState(false);
 
   const handleLogin =
@@ -969,147 +1019,34 @@ function AdminLogin({
           error
         );
 
-        if (
-          error.code ===
-          "auth/invalid-credential"
-        ) {
-          alert(
-            "❌ Email या Password गलत है।"
-          );
-        } else if (
-          error.code ===
-          "auth/user-not-found"
-        ) {
-          alert(
-            "❌ Admin account Firebase में नहीं मिला।"
-          );
-        } else if (
-          error.code ===
-          "auth/wrong-password"
-        ) {
-          alert(
-            "❌ Admin Password गलत है।"
-          );
-        } else {
-          alert(
-            "❌ Admin Login Error:\n" +
-              error.message
-          );
-        }
+        alert(
+          "❌ Admin Login Error:\n" +
+            error.message
+        );
       } finally {
         setLoading(false);
       }
     };
 
-  const resetAdminPassword =
-    async () => {
-      const targetEmail =
-        email.trim().toLowerCase();
-
-      if (
-        targetEmail !==
-        ADMIN_EMAIL.toLowerCase()
-      ) {
-        alert(
-          `Admin Email केवल ${ADMIN_EMAIL} है।`
-        );
-        return;
-      }
-
-      try {
-        setResetLoading(true);
-
-        await sendPasswordResetEmail(
-          auth,
-          targetEmail
-        );
-
-        alert(
-          "✅ Password reset link Admin Email पर भेज दिया गया है।"
-        );
-
-        setShowForgot(false);
-      } catch (error) {
-        console.error(
-          error
-        );
-
-        alert(
-          "❌ Password reset error:\n" +
-            error.message
-        );
-      } finally {
-        setResetLoading(false);
-      }
-    };
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "20px",
-        background:
-          "linear-gradient(135deg,#eef6ff,#ffffff,#f3e8ff)",
-        fontFamily:
-          "Arial, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "430px",
-          background: "#fff",
-          borderRadius: "20px",
-          padding: "30px",
-          boxShadow:
-            "0 15px 45px rgba(0,0,0,.15)",
-        }}
-      >
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "25px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "55px",
-            }}
-          >
-            👑
-          </div>
-
-          <h1
-            style={{
-              margin: "10px 0",
-              color: "#1d4ed8",
-            }}
-          >
-            Admin Login
-          </h1>
-
-          <p
-            style={{
-              color: "#64748b",
-            }}
-          >
-            Exam Test Admin Panel
-          </p>
+    <div className="auth-overlay">
+      <div className="auth-card">
+        <div className="auth-icon">
+          👑
         </div>
+
+        <h1>
+          Admin Login
+        </h1>
+
+        <p>
+          Exam Test Admin Panel
+        </p>
 
         <form
           onSubmit={handleLogin}
         >
-          <label
-            style={{
-              display: "block",
-              fontWeight: "700",
-              marginBottom: "7px",
-            }}
-          >
+          <label>
             📧 Admin Email
           </label>
 
@@ -1117,31 +1054,11 @@ function AdminLogin({
             type="email"
             value={email}
             onChange={(e) =>
-              setEmail(
-                e.target.value
-              )
+              setEmail(e.target.value)
             }
-            placeholder="Admin Email"
-            style={{
-              width: "100%",
-              padding: "13px",
-              border:
-                "1px solid #cbd5e1",
-              borderRadius: "10px",
-              fontSize: "16px",
-              marginBottom: "18px",
-              boxSizing:
-                "border-box",
-            }}
           />
 
-          <label
-            style={{
-              display: "block",
-              fontWeight: "700",
-              marginBottom: "7px",
-            }}
-          >
+          <label>
             🔐 Admin Password
           </label>
 
@@ -1153,36 +1070,12 @@ function AdminLogin({
                 e.target.value
               )
             }
-            placeholder="Admin Password"
-            style={{
-              width: "100%",
-              padding: "13px",
-              border:
-                "1px solid #cbd5e1",
-              borderRadius: "10px",
-              fontSize: "16px",
-              marginBottom: "15px",
-              boxSizing:
-                "border-box",
-            }}
           />
 
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: "100%",
-              padding: "14px",
-              border: "none",
-              borderRadius: "10px",
-              background:
-                loading
-                  ? "#94a3b8"
-                  : "#1d4ed8",
-              color: "#fff",
-              fontSize: "17px",
-              fontWeight: "700",
-            }}
+            className="auth-primary-btn"
           >
             {loading
               ? "⏳ Login हो रहा है..."
@@ -1192,166 +1085,10 @@ function AdminLogin({
 
         <button
           type="button"
-          onClick={() =>
-            setShowForgot(
-              !showForgot
-            )
-          }
-          style={{
-            width: "100%",
-            marginTop: "12px",
-            padding: "11px",
-            border: "none",
-            background: "transparent",
-            color: "#2563eb",
-            fontWeight: "700",
-          }}
-        >
-          🔑 Admin Password भूल गए?
-        </button>
-
-        {showForgot && (
-          <div
-            style={{
-              marginTop: "8px",
-              padding: "15px",
-              borderRadius: "12px",
-              background: "#eff6ff",
-              border:
-                "1px solid #bfdbfe",
-            }}
-          >
-            <p
-              style={{
-                marginTop: 0,
-                color: "#334155",
-              }}
-            >
-              Admin password reset link
-              इस email पर जाएगा:
-            </p>
-
-            <strong>
-              {ADMIN_EMAIL}
-            </strong>
-
-            <button
-              type="button"
-              disabled={
-                resetLoading
-              }
-              onClick={
-                resetAdminPassword
-              }
-              style={{
-                width: "100%",
-                marginTop: "12px",
-                padding: "11px",
-                border: "none",
-                borderRadius: "9px",
-                background:
-                  "#16a34a",
-                color: "#fff",
-                fontWeight: "700",
-              }}
-            >
-              {resetLoading
-                ? "⏳ भेजा जा रहा है..."
-                : "📧 Reset Email भेजें"}
-            </button>
-          </div>
-        )}
-
-        <button
-          type="button"
+          className="auth-close-btn"
           onClick={onClose}
-          style={{
-            width: "100%",
-            marginTop: "12px",
-            padding: "12px",
-            border: "none",
-            borderRadius: "10px",
-            background: "#e2e8f0",
-            color: "#334155",
-            fontSize: "16px",
-            fontWeight: "700",
-          }}
         >
           ← Website पर वापस जाएँ
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ======================================================
-// LOGIN REQUIRED SCREEN
-// ======================================================
-
-function LoginRequired({
-  onLogin,
-  onBack,
-}) {
-  return (
-    <div
-      className="container"
-      style={{
-        paddingTop: "50px",
-        paddingBottom: "80px",
-      }}
-    >
-      <div
-        className="empty-box"
-        style={{
-          maxWidth: "600px",
-          margin: "auto",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "70px",
-            marginBottom: "15px",
-          }}
-        >
-          🔐
-        </div>
-
-        <h2>
-          Login करना जरूरी है
-        </h2>
-
-        <p
-          style={{
-            fontSize: "18px",
-            color: "#64748b",
-          }}
-        >
-          इस section को खोलने के लिए
-          पहले User Login करें।
-        </p>
-
-        <button
-          className="open-btn"
-          onClick={onLogin}
-          style={{
-            marginTop: "15px",
-            minWidth: "220px",
-          }}
-        >
-          📱 User Login
-        </button>
-
-        <br />
-
-        <button
-          className="back"
-          onClick={onBack}
-          style={{
-            marginTop: "15px",
-          }}
-        >
-          ← Home पर वापस जाएँ
         </button>
       </div>
     </div>
@@ -1467,8 +1204,7 @@ function TestRunner({
           }}
         >
           <h2>
-            इस Test में Questions
-            नहीं हैं।
+            इस Test में Questions नहीं हैं।
           </h2>
         </div>
       </div>
@@ -1480,8 +1216,7 @@ function TestRunner({
       correct,
       wrong,
       percentage,
-    } =
-      calculateResult();
+    } = calculateResult();
 
     return (
       <div
@@ -1548,8 +1283,7 @@ function TestRunner({
           <div
             style={{
               display: "flex",
-              justifyContent:
-                "center",
+              justifyContent: "center",
               gap: "15px",
               flexWrap: "wrap",
               margin: "25px 0",
@@ -1557,8 +1291,7 @@ function TestRunner({
           >
             <div
               style={{
-                padding:
-                  "15px 25px",
+                padding: "15px 25px",
                 borderRadius: "12px",
                 background: "#dcfce7",
                 color: "#166534",
@@ -1570,8 +1303,7 @@ function TestRunner({
 
             <div
               style={{
-                padding:
-                  "15px 25px",
+                padding: "15px 25px",
                 borderRadius: "12px",
                 background: "#fee2e2",
                 color: "#991b1b",
@@ -1585,8 +1317,7 @@ function TestRunner({
           <div
             style={{
               display: "flex",
-              justifyContent:
-                "center",
+              justifyContent: "center",
               gap: "12px",
               flexWrap: "wrap",
             }}
@@ -1595,17 +1326,14 @@ function TestRunner({
               type="button"
               onClick={() => {
                 setCurrent(0);
-                setAnswers({});
                 setSubmitted(false);
                 setReviewMode(true);
                 setShowExplanation(false);
               }}
               style={{
                 ...buttonBase,
-                padding:
-                  "13px 20px",
-                background:
-                  "#1264d8",
+                padding: "13px 20px",
+                background: "#1264d8",
                 color: "#fff",
                 fontSize: "17px",
                 fontWeight: "700",
@@ -1620,10 +1348,8 @@ function TestRunner({
               onClick={onBack}
               style={{
                 ...buttonBase,
-                padding:
-                  "13px 20px",
-                background:
-                  "#e2e8f0",
+                padding: "13px 20px",
+                background: "#e2e8f0",
                 color: "#111827",
                 fontSize: "17px",
                 fontWeight: "700",
@@ -1647,22 +1373,15 @@ function TestRunner({
     selected !== undefined;
 
   const correctAnswer =
-    getCorrectIndex(
-      question
-    );
+    getCorrectIndex(question);
 
   const goPrevious =
     () => {
       setCurrent((value) =>
-        Math.max(
-          0,
-          value - 1
-        )
+        Math.max(0, value - 1)
       );
 
-      setShowExplanation(
-        false
-      );
+      setShowExplanation(false);
     };
 
   const goNext = () => {
@@ -1670,14 +1389,11 @@ function TestRunner({
       current <
       questions.length - 1
     ) {
-      setCurrent(
-        (value) =>
-          value + 1
+      setCurrent((value) =>
+        value + 1
       );
 
-      setShowExplanation(
-        false
-      );
+      setShowExplanation(false);
     } else {
       setSubmitted(true);
     }
@@ -1692,34 +1408,27 @@ function TestRunner({
         return;
       }
 
-      setAnswers(
-        (prev) => ({
-          ...prev,
-          [current]: index,
-        })
-      );
+      setAnswers((prev) => ({
+        ...prev,
+        [current]: index,
+      }));
 
       if (reviewMode) {
-        setShowExplanation(
-          true
-        );
+        setShowExplanation(true);
       } else {
-        window.setTimeout(
-          () => {
-            if (
-              current <
-              questions.length - 1
-            ) {
-              setCurrent(
-                (value) =>
-                  value + 1
-              );
-            } else {
-              setSubmitted(true);
-            }
-          },
-          180
-        );
+        window.setTimeout(() => {
+          if (
+            current <
+            questions.length - 1
+          ) {
+            setCurrent(
+              (value) =>
+                value + 1
+            );
+          } else {
+            setSubmitted(true);
+          }
+        }, 180);
       }
     };
 
@@ -1750,8 +1459,7 @@ function TestRunner({
       <div
         style={{
           background: "#fff",
-          border:
-            "1px solid #dbe3ee",
+          border: "1px solid #dbe3ee",
           borderRadius: "18px",
           padding: "30px",
         }}
@@ -1770,8 +1478,7 @@ function TestRunner({
               fontWeight: "800",
             }}
           >
-            {test?.exam ||
-              "UPPCS"}
+            {test?.exam || "UPPCS"}
           </div>
 
           <div
@@ -1781,9 +1488,7 @@ function TestRunner({
               marginTop: "5px",
             }}
           >
-            {test?.title ||
-              "Test"}{" "}
-            /{" "}
+            {test?.title || "Test"} /{" "}
             {questions.length}
           </div>
 
@@ -1795,8 +1500,7 @@ function TestRunner({
               color: "#334155",
             }}
           >
-            प्रश्न{" "}
-            {current + 1} /{" "}
+            प्रश्न {current + 1} /{" "}
             {questions.length}
 
             {reviewMode && (
@@ -1838,95 +1542,87 @@ function TestRunner({
         >
           {(question.options || [])
             .slice(0, 4)
-            .map(
-              (option, index) => {
-                const isSelected =
-                  selected === index;
+            .map((option, index) => {
+              const isSelected =
+                selected === index;
 
-                const isCorrect =
-                  index ===
-                  correctAnswer;
+              const isCorrect =
+                index ===
+                correctAnswer;
 
-                const isWrong =
-                  reviewMode &&
-                  isSelected &&
-                  !isCorrect;
+              const isWrong =
+                reviewMode &&
+                isSelected &&
+                !isCorrect;
 
-                let background =
-                  "#1264d8";
+              let background =
+                "#1264d8";
 
-                if (
-                  reviewMode &&
-                  hasSelected
-                ) {
-                  if (
-                    isCorrect
-                  ) {
-                    background =
-                      "#16a34a";
-                  } else if (
-                    isWrong
-                  ) {
-                    background =
-                      "#dc2626";
-                  }
-                } else if (
-                  isSelected
-                ) {
+              if (
+                reviewMode &&
+                hasSelected
+              ) {
+                if (isCorrect) {
                   background =
-                    "#2563eb";
+                    "#16a34a";
+                } else if (isWrong) {
+                  background =
+                    "#dc2626";
                 }
+              } else if (
+                isSelected
+              ) {
+                background =
+                  "#2563eb";
+              }
 
-                return (
-                  <button
-                    key={index}
-                    type="button"
-                    disabled={
-                      reviewMode &&
-                      hasSelected
-                    }
-                    onClick={() =>
-                      selectOption(
-                        index
-                      )
-                    }
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  disabled={
+                    reviewMode &&
+                    hasSelected
+                  }
+                  onClick={() =>
+                    selectOption(index)
+                  }
+                  style={{
+                    ...buttonBase,
+                    width: "100%",
+                    minHeight: "64px",
+                    padding:
+                      "16px 20px",
+                    background,
+                    color: "#fff",
+                    textAlign: "left",
+                    fontSize: "20px",
+                    fontWeight: "700",
+                    lineHeight: "1.4",
+                    display: "flex",
+                    alignItems:
+                      "center",
+                  }}
+                >
+                  <span
                     style={{
-                      ...buttonBase,
-                      width: "100%",
-                      minHeight: "64px",
-                      padding:
-                        "16px 20px",
-                      background,
-                      color: "#fff",
-                      textAlign: "left",
-                      fontSize: "20px",
-                      fontWeight: "700",
-                      lineHeight: "1.4",
-                      display: "flex",
-                      alignItems:
-                        "center",
+                      width: "45px",
+                      flex:
+                        "0 0 45px",
                     }}
                   >
-                    <span
-                      style={{
-                        width: "45px",
-                        flex:
-                          "0 0 45px",
-                      }}
-                    >
-                      {String.fromCharCode(
-                        65 + index
-                      )}
-                      .
-                    </span>
+                    {String.fromCharCode(
+                      65 + index
+                    )}
+                    .
+                  </span>
 
-                    <span>
-                      {option}
-                    </span>
-                  </button>
-                );
-              }
-            )}
+                  <span>
+                    {option}
+                  </span>
+                </button>
+              );
+            })}
         </div>
 
         {reviewMode &&
@@ -1952,8 +1648,7 @@ function TestRunner({
                 {selected ===
                 correctAnswer
                   ? "✓ सही उत्तर"
-                  : correctAnswer >=
-                    0
+                  : correctAnswer >= 0
                   ? `✗ गलत उत्तर — सही उत्तर: ${String.fromCharCode(
                       65 +
                         correctAnswer
@@ -1975,8 +1670,7 @@ function TestRunner({
                 style={{
                   fontSize: "17px",
                   lineHeight: "1.6",
-                  whiteSpace:
-                    "pre-wrap",
+                  whiteSpace: "pre-wrap",
                 }}
               >
                 {question.explanation ||
@@ -2002,8 +1696,7 @@ function TestRunner({
             onClick={goPrevious}
             style={{
               ...buttonBase,
-              padding:
-                "13px 22px",
+              padding: "13px 22px",
               background:
                 current === 0
                   ? "#bfdbfe"
@@ -2023,8 +1716,7 @@ function TestRunner({
               onClick={goNext}
               style={{
                 ...buttonBase,
-                padding:
-                  "13px 22px",
+                padding: "13px 22px",
                 background:
                   hasSelected
                     ? "#1264d8"
@@ -2046,8 +1738,7 @@ function TestRunner({
                 fontWeight: "600",
               }}
             >
-              विकल्प चुनते ही अगला
-              प्रश्न खुलेगा
+              विकल्प चुनते ही अगला प्रश्न खुलेगा
             </div>
           )}
         </div>
@@ -2080,9 +1771,7 @@ export default function App() {
     useState({});
 
   const [siteResources, setSiteResources] =
-    useState(
-      defaultResources
-    );
+    useState(defaultResources);
 
   const [adminOpen, setAdminOpen] =
     useState(false);
@@ -2090,8 +1779,11 @@ export default function App() {
   const [adminLoginOpen, setAdminLoginOpen] =
     useState(false);
 
-  const [userLoginOpen, setUserLoginOpen] =
-    useState(false);
+  const [authPage, setAuthPage] =
+    useState(null);
+
+  const [pendingExamUser, setPendingExamUser] =
+    useState(null);
 
   // ====================================================
   // AUTH LISTENER
@@ -2102,13 +1794,8 @@ export default function App() {
       onAuthStateChanged(
         auth,
         (currentUser) => {
-          setUser(
-            currentUser
-          );
-
-          setAuthLoading(
-            false
-          );
+          setUser(currentUser);
+          setAuthLoading(false);
         }
       );
 
@@ -2166,9 +1853,7 @@ export default function App() {
             Array.isArray(value) &&
             value.length
           ) {
-            setSiteResources(
-              value
-            );
+            setSiteResources(value);
           } else if (
             value &&
             typeof value ===
@@ -2203,8 +1888,7 @@ export default function App() {
       () =>
         siteResources.filter(
           (item) =>
-            item?.enabled !==
-            false
+            item?.enabled !== false
         ),
       [siteResources]
     );
@@ -2223,11 +1907,9 @@ export default function App() {
         ([id, test]) => {
           if (
             test &&
-            test.status ===
-              "public"
+            test.status === "public"
           ) {
-            result[id] =
-              test;
+            result[id] = test;
           }
         }
       );
@@ -2236,62 +1918,22 @@ export default function App() {
     }, [cloudTests]);
 
   // ====================================================
-  // GOOGLE LOGIN - OPTIONAL
+  // USER LOGIN IS MOBILE + PASSWORD
   // ====================================================
 
-  const googleLogin =
-    async () => {
-      try {
-        const result =
-          await signInWithPopup(
-            auth,
-            googleProvider
-          );
-
-        return result.user;
-      } catch (error) {
-        console.error(
-          "Google Login Error:",
-          error
-        );
-
-        alert(
-          "Google Login नहीं हुआ:\n" +
-            error.message
-        );
-
-        return null;
-      }
-    };
+  const login = async () => {
+    setAuthPage("login");
+    return null;
+  };
 
   // ====================================================
-  // USER LOGIN SUCCESS
+  // AUTH SUCCESS
   // ====================================================
 
-  const handleUserLoginSuccess =
+  const handleAuthSuccess =
     (loggedUser) => {
-      setUser(
-        loggedUser
-      );
-
-      setUserLoginOpen(
-        false
-      );
-
-      alert(
-        "✅ User Login सफल हुआ।"
-      );
-    };
-
-  // ====================================================
-  // OPEN USER LOGIN
-  // ====================================================
-
-  const openUserLogin =
-    () => {
-      setUserLoginOpen(
-        true
-      );
+      setUser(loggedUser);
+      setAuthPage(null);
     };
 
   // ====================================================
@@ -2305,21 +1947,58 @@ export default function App() {
 
         setAdminOpen(false);
         setAdminLoginOpen(false);
-        setUserLoginOpen(false);
-
+        setAuthPage(null);
         setPage("home");
-
-        setSelectedExam(null);
-        setSelectedTest(null);
       } catch (error) {
-        console.error(
-          error
-        );
+        console.error(error);
 
         alert(
           "Logout error:\n" +
             error.message
         );
+      }
+    };
+
+  // ====================================================
+  // OPEN LOGIN
+  // ====================================================
+
+  const openLogin =
+    () => {
+      setAuthPage("login");
+    };
+
+  // ====================================================
+  // OPEN REGISTER
+  // ====================================================
+
+  const openRegister =
+    () => {
+      setAuthPage("register");
+    };
+
+  // ====================================================
+  // OPEN FORGOT
+  // ====================================================
+
+  const openForgot =
+    () => {
+      setAuthPage("forgot");
+    };
+
+  // ====================================================
+  // REQUIRE LOGIN
+  // ====================================================
+
+  const requireLogin =
+    (action) => {
+      if (!user) {
+        setAuthPage("login");
+        return;
+      }
+
+      if (action) {
+        action();
       }
     };
 
@@ -2337,9 +2016,7 @@ export default function App() {
         return;
       }
 
-      setAdminLoginOpen(
-        true
-      );
+      setAdminLoginOpen(true);
     };
 
   // ====================================================
@@ -2348,33 +2025,9 @@ export default function App() {
 
   const handleAdminLoginSuccess =
     (loggedUser) => {
-      setUser(
-        loggedUser
-      );
-
-      setAdminLoginOpen(
-        false
-      );
-
-      setAdminOpen(
-        true
-      );
-    };
-
-  // ====================================================
-  // CHECK USER LOGIN
-  // ====================================================
-
-  const requireUserLogin =
-    (callback) => {
-      if (!user) {
-        setUserLoginOpen(
-          true
-        );
-        return;
-      }
-
-      callback();
+      setUser(loggedUser);
+      setAdminLoginOpen(false);
+      setAdminOpen(true);
     };
 
   // ====================================================
@@ -2384,13 +2037,10 @@ export default function App() {
   const goHome =
     () => {
       setPage("home");
-
       setSelectedExam(null);
       setSelectedTest(null);
-
       setAdminOpen(false);
       setAdminLoginOpen(false);
-      setUserLoginOpen(false);
 
       window.scrollTo({
         top: 0,
@@ -2404,19 +2054,13 @@ export default function App() {
 
   const openExam =
     (exam) => {
-      requireUserLogin(() => {
-        setSelectedExam(
-          exam
-        );
+      setSelectedExam(exam);
+      setPage("tests");
+      setSelectedTest(null);
 
-        setPage("tests");
-
-        setSelectedTest(null);
-
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
       });
     };
 
@@ -2425,14 +2069,7 @@ export default function App() {
   // ====================================================
 
   const openTest =
-    (test) => {
-      if (!user) {
-        setUserLoginOpen(
-          true
-        );
-        return;
-      }
-
+    async (test) => {
       if (!test) {
         alert(
           "❌ Test उपलब्ध नहीं है।"
@@ -2440,10 +2077,12 @@ export default function App() {
         return;
       }
 
-      setSelectedTest(
-        test
-      );
+      if (!user) {
+        setAuthPage("login");
+        return;
+      }
 
+      setSelectedTest(test);
       setPage("test");
 
       window.scrollTo({
@@ -2451,6 +2090,22 @@ export default function App() {
         behavior: "smooth",
       });
     };
+
+  // ====================================================
+  // NEW USER REGISTRATION SUCCESS
+  // ====================================================
+
+  const handleRegistrationSuccess = (newUser) => {
+    setUser(newUser);
+    setPendingExamUser(newUser);
+    setAuthPage("exam");
+  };
+
+  const handleExamComplete = (updatedUser) => {
+    setUser(updatedUser);
+    setPendingExamUser(null);
+    setAuthPage(null);
+  };
 
   // ====================================================
   // AUTH LOADING
@@ -2462,8 +2117,7 @@ export default function App() {
         style={{
           minHeight: "100vh",
           display: "flex",
-          justifyContent:
-            "center",
+          justifyContent: "center",
           alignItems: "center",
           background: "#eef5ff",
           fontSize: "22px",
@@ -2473,6 +2127,68 @@ export default function App() {
       >
         📚 Exam Test Loading...
       </div>
+    );
+  }
+
+  // ====================================================
+  // AUTH PAGES
+  // ====================================================
+
+  if (authPage === "register") {
+    return (
+      <RegisterPage
+        onSuccess={
+          handleRegistrationSuccess
+        }
+        onLogin={() =>
+          setAuthPage("login")
+        }
+        onClose={() =>
+          setAuthPage(null)
+        }
+      />
+    );
+  }
+
+  if (authPage === "exam" && pendingExamUser) {
+    return (
+      <ExamSelectionPage
+        user={pendingExamUser}
+        onComplete={handleExamComplete}
+        onClose={() => {
+          setPendingExamUser(null);
+          setAuthPage(null);
+        }}
+      />
+    );
+  }
+
+  if (authPage === "login") {
+    return (
+      <LoginPage
+        onSuccess={
+          handleAuthSuccess
+        }
+        onRegister={() =>
+          setAuthPage("register")
+        }
+        onForgot={() =>
+          setAuthPage("forgot")
+        }
+        onClose={() =>
+          setAuthPage(null)
+        }
+      />
+    );
+  }
+
+  if (authPage === "forgot") {
+    return (
+      <ForgotPassword
+        onBack={() =>
+          setAuthPage("login")
+        }
+      />
     );
   }
 
@@ -2487,28 +2203,7 @@ export default function App() {
           handleAdminLoginSuccess
         }
         onClose={() =>
-          setAdminLoginOpen(
-            false
-          )
-        }
-      />
-    );
-  }
-
-  // ====================================================
-  // USER LOGIN
-  // ====================================================
-
-  if (userLoginOpen) {
-    return (
-      <UserLogin
-        onSuccess={
-          handleUserLoginSuccess
-        }
-        onClose={() =>
-          setUserLoginOpen(
-            false
-          )
+          setAdminLoginOpen(false)
         }
       />
     );
@@ -2521,17 +2216,15 @@ export default function App() {
   if (adminOpen) {
     return (
       <div className="app">
+        <PasswordResetAdmin user={user} />
+
         <AdminPanel
           user={user}
           tests={cloudTests}
-          resources={
-            siteResources
+          resources={siteResources}
+          onClose={() =>
+            setAdminOpen(false)
           }
-          onClose={() => {
-            setAdminOpen(
-              false
-            );
-          }}
         />
       </div>
     );
@@ -2547,16 +2240,35 @@ export default function App() {
   ) {
     if (!user) {
       return (
-        <LoginRequired
-          onLogin={
-            openUserLogin
-          }
-          onBack={() =>
-            setPage(
-              "tests"
-            )
-          }
-        />
+        <div className="app">
+          <div className="container">
+            <div className="empty-box">
+              <h2>
+                🔐 Test शुरू करने के लिए Login जरूरी है
+              </h2>
+
+              <p>
+                कृपया पहले Login करें।
+              </p>
+
+              <button
+                className="open-btn"
+                onClick={openLogin}
+              >
+                🔐 Login करें
+              </button>
+
+              <button
+                className="back"
+                onClick={() =>
+                  setPage("tests")
+                }
+              >
+                ← वापस जाएँ
+              </button>
+            </div>
+          </div>
+        </div>
       );
     }
 
@@ -2564,13 +2276,9 @@ export default function App() {
       <div className="app">
         <main className="test-page-container">
           <TestRunner
-            test={
-              selectedTest
-            }
+            test={selectedTest}
             onBack={() =>
-              setPage(
-                "tests"
-              )
+              setPage("tests")
             }
           />
         </main>
@@ -2583,713 +2291,589 @@ export default function App() {
   // ====================================================
 
   return (
-    <div className="app">
+    <>
+      <div className="app">
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
+        {/* HEADER */}
 
-      <header className="header">
-        <div className="header-inner">
+        <header className="header">
+          <div className="header-inner">
 
-          <div
-            className="logo"
-            onClick={
-              goHome
-            }
-          >
-            <div className="logo-icon">
-              📚
-            </div>
-
-            <div className="logo-text">
-              <h2>
-                Exam Test
-              </h2>
-
-              <span>
-                Learn Today |
-                Lead Tomorrow
-              </span>
-            </div>
-          </div>
-
-          <nav className="nav">
-
-            <button
-              onClick={
-                goHome
-              }
+            <div
+              className="logo"
+              onClick={goHome}
             >
-              🏠 Home
-            </button>
+              <div className="logo-icon">
+                📚
+              </div>
 
-            <button
-              onClick={() =>
-                requireUserLogin(
-                  () =>
+              <div className="logo-text">
+                <h2>
+                  Exam Test
+                </h2>
+
+                <span>
+                  Learn Today |
+                  Lead Tomorrow
+                </span>
+              </div>
+            </div>
+
+            <nav className="nav">
+
+              <button
+                onClick={goHome}
+              >
+                🏠 Home
+              </button>
+
+              <button
+                onClick={() =>
+                  requireLogin(() =>
                     setPage(
                       "resources"
                     )
-                )
-              }
-            >
-              📚 Books
-            </button>
+                  )
+                }
+              >
+                📚 Books
+              </button>
 
-            <button
-              onClick={() =>
-                requireUserLogin(
-                  () =>
+              <button
+                onClick={() =>
+                  requireLogin(() =>
                     setPage(
                       "current"
                     )
-                )
-              }
-            >
-              📰 Current Affairs
-            </button>
-
-            <button
-              onClick={() =>
-                requireUserLogin(
-                  () =>
-                    setPage(
-                      "mcq"
-                    )
-                )
-              }
-            >
-              📝 MCQ
-            </button>
-
-            {/* ADMIN */}
-
-            <button
-              className="admin-btn"
-              onClick={
-                openAdmin
-              }
-            >
-              👑 Admin Panel
-            </button>
-
-            {/* USER LOGIN */}
-
-            {user ? (
-              <button
-                className="login-btn"
-                onClick={
-                  logout
-                }
-                title={
-                  user.phoneNumber ||
-                  user.email ||
-                  "User"
+                  )
                 }
               >
-                👤 Logout
+                📰 Current Affairs
               </button>
-            ) : (
+
               <button
-                className="login-btn"
-                onClick={
-                  openUserLogin
+                onClick={() =>
+                  requireLogin(() =>
+                    setPage("mcq")
+                  )
                 }
               >
-                📱 User Login
+                📝 MCQ
               </button>
-            )}
 
-          </nav>
-        </div>
-      </header>
+              <button
+                className="admin-btn"
+                onClick={openAdmin}
+              >
+                👑 Admin Panel
+              </button>
 
-      {/* =================================================
-          MAIN
-      ================================================= */}
-
-      <main className="container">
-
-        {/* =================================================
-            HOME
-        ================================================= */}
-
-        {page === "home" && (
-          <>
-
-            <section className="hero">
-
-              <h1 className="exam-test-hero-title">
-                <span>
-                  Exam{" "}
-                </span>
-
-                <span>
-                  Test
-                </span>
-              </h1>
-
-              <p>
-                प्रतियोगी परीक्षाओं
-                की तैयारी के लिए
-                एक ही प्लेटफॉर्म
-              </p>
-
-              <div className="search">
-
-                <input
-                  placeholder="आप क्या पढ़ना चाहते हैं?"
-                />
-
-                <button>
-                  🔎 खोजें
+              {user ? (
+                <button
+                  className="login-btn"
+                  onClick={logout}
+                  title={
+                    user.email ||
+                    user.displayName
+                  }
+                >
+                  👤 Logout
                 </button>
+              ) : (
+                <button
+                  className="login-btn"
+                  onClick={openLogin}
+                >
+                  🔐 Login
+                </button>
+              )}
+
+            </nav>
+          </div>
+        </header>
+
+        {/* MAIN */}
+
+        <main className="container">
+
+          {/* HOME */}
+
+          {page === "home" && (
+            <>
+              <section className="hero">
+
+                <h1 className="exam-test-hero-title">
+                  <span>
+                    Exam{" "}
+                  </span>
+
+                  <span>
+                    Test
+                  </span>
+                </h1>
+
+                <p>
+                  प्रतियोगी परीक्षाओं की
+                  तैयारी के लिए एक ही प्लेटफॉर्म
+                </p>
+
+                <div className="search">
+
+                  <input
+                    placeholder="आप क्या पढ़ना चाहते हैं?"
+                  />
+
+                  <button>
+                    🔎 खोजें
+                  </button>
+
+                </div>
+              </section>
+
+              {/* EXAMS */}
+
+              <div className="section-title">
+
+                <h2>
+                  🎯 All Exam Test Series
+                </h2>
+
+                <p>
+                  सभी प्रमुख प्रतियोगी
+                  परीक्षाओं के लिए Test Series
+                </p>
 
               </div>
-            </section>
 
-            {/* EXAMS */}
+              <div className="exam-grid">
 
-            <div className="section-title">
-
-              <h2>
-                🎯 All Exam Test
-                Series
-              </h2>
-
-              <p>
-                सभी प्रमुख
-                प्रतियोगी परीक्षाओं
-                के लिए Test Series
-              </p>
-
-            </div>
-
-            <div className="exam-grid">
-
-              {exams.map(
-                (exam) => (
-                  <div
-                    className="exam-card"
-                    key={
-                      exam.id
-                    }
-                    style={{
-                      background:
-                        exam.color,
-                    }}
-                  >
-
-                    <div className="exam-icon">
-                      {
-                        exam.icon
-                      }
-                    </div>
-
-                    <h3>
-                      {
-                        exam.name
-                      }
-                    </h3>
-
-                    <p>
-                      {
-                        exam.description
-                      }
-                    </p>
-
-                    <span className="paid">
-                      Test Series
-                    </span>
-
-                    <button
-                      className="open-btn"
-                      onClick={() =>
-                        openExam(
-                          exam
-                        )
-                      }
-                    >
-                      Test Series →
-                    </button>
-
-                  </div>
-                )
-              )}
-
-            </div>
-
-            {/* RESOURCES */}
-
-            <div className="section-title">
-
-              <h2>
-                📚 Study Resources
-              </h2>
-
-              <p>
-                परीक्षा की तैयारी
-                के लिए सभी आवश्यक
-                सामग्री
-              </p>
-
-            </div>
-
-            <div className="resource-grid">
-
-              {visibleResources.map(
-                (
-                  item,
-                  index
-                ) => (
-                  <div
-                    className="resource-card"
-                    key={
-                      item.id ||
-                      index
-                    }
-                  >
-
-                    <div className="icon">
-                      {
-                        item.icon
-                      }
-                    </div>
-
-                    <h3>
-                      {
-                        item.title
-                      }
-                    </h3>
-
-                    <p>
-                      {
-                        item.text
-                      }
-                    </p>
-
-                    <button
-                      className="open-btn"
-                      onClick={() => {
-
-                        requireUserLogin(
-                          () => {
-
-                            if (
-                              item.page ===
-                              "tests"
-                            ) {
-                              openExam(
-                                exams[0]
-                              );
-                            } else {
-                              setPage(
-                                item.page ||
-                                  "resources"
-                              );
-                            }
-
-                          }
-                        );
-
+                {exams.map(
+                  (exam) => (
+                    <div
+                      className="exam-card"
+                      key={exam.id}
+                      style={{
+                        background:
+                          exam.color,
                       }}
                     >
-                      Open →
-                    </button>
 
-                  </div>
-                )
-              )}
+                      <div className="exam-icon">
+                        {exam.icon}
+                      </div>
 
-            </div>
+                      <h3>
+                        {exam.name}
+                      </h3>
 
-            {/* CURRENT AFFAIRS */}
+                      <p>
+                        {exam.description}
+                      </p>
 
-            <div className="blue-box">
+                      <span className="paid">
+                        Test Series
+                      </span>
 
-              <h2>
-                📰 Daily Current
-                Affairs Quiz
-              </h2>
+                      <button
+                        className="open-btn"
+                        onClick={() =>
+                          requireLogin(
+                            () =>
+                              openExam(
+                                exam
+                              )
+                          )
+                        }
+                      >
+                        Test Series →
+                      </button>
 
-              <p>
-                आज के महत्वपूर्ण
-                Current Affairs पर
-                आधारित MCQ
-              </p>
+                    </div>
+                  )
+                )}
 
-              <button
-                className="primary"
-                onClick={() =>
-                  requireUserLogin(
-                    () =>
+              </div>
+
+              {/* RESOURCES */}
+
+              <div className="section-title">
+
+                <h2>
+                  📚 Study Resources
+                </h2>
+
+                <p>
+                  परीक्षा की तैयारी के लिए
+                  सभी आवश्यक सामग्री
+                </p>
+
+              </div>
+
+              <div className="resource-grid">
+
+                {visibleResources.map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <div
+                      className="resource-card"
+                      key={
+                        item.id ||
+                        index
+                      }
+                    >
+
+                      <div className="icon">
+                        {item.icon}
+                      </div>
+
+                      <h3>
+                        {item.title}
+                      </h3>
+
+                      <p>
+                        {item.text}
+                      </p>
+
+                      <button
+                        className="open-btn"
+                        onClick={() => {
+
+                          requireLogin(
+                            () => {
+
+                              if (
+                                item.page ===
+                                "tests"
+                              ) {
+                                openExam(
+                                  exams[0]
+                                );
+                              } else {
+                                setPage(
+                                  item.page ||
+                                    "resources"
+                                );
+                              }
+
+                            }
+                          );
+
+                        }}
+                      >
+                        Open →
+                      </button>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+              {/* CURRENT AFFAIRS */}
+
+              <div className="blue-box">
+
+                <h2>
+                  📰 Daily Current Affairs Quiz
+                </h2>
+
+                <p>
+                  आज के महत्वपूर्ण Current
+                  Affairs पर आधारित MCQ
+                </p>
+
+                <button
+                  className="primary"
+                  onClick={() =>
+                    requireLogin(() =>
                       setPage(
                         "current"
                       )
-                  )
-                }
-              >
-                आज का Quiz शुरू करें
-              </button>
-
-            </div>
-
-            {/* AI */}
-
-            <div className="blue-box">
-
-              <h2>
-                🤖 AI MCQ Generator
-              </h2>
-
-              <p>
-                परीक्षा और विषय
-                चुनकर नए MCQ तैयार
-                करें।
-              </p>
-
-              <button
-                className="primary"
-                onClick={() =>
-                  requireUserLogin(
-                    () =>
-                      setPage(
-                        "mcq"
-                      )
-                  )
-                }
-              >
-                MCQ Generator खोलें
-              </button>
-
-            </div>
-
-          </>
-        )}
-
-        {/* =================================================
-            TEST LIST
-        ================================================= */}
-
-        {page === "tests" &&
-          selectedExam && (
-            <>
-              {!user ? (
-                <LoginRequired
-                  onLogin={
-                    openUserLogin
-                  }
-                  onBack={
-                    goHome
-                  }
-                />
-              ) : (
-                <>
-                  <button
-                    className="back"
-                    onClick={
-                      goHome
-                    }
-                  >
-                    ← Home पर वापस जाएँ
-                  </button>
-
-                  <div className="page-title">
-
-                    <div className="big-icon">
-                      {
-                        selectedExam.icon
-                      }
-                    </div>
-
-                    <h1>
-                      {
-                        selectedExam.name
-                      }{" "}
-                      Test Series
-                    </h1>
-
-                    <p>
-                      {
-                        selectedExam.description
-                      }
-                    </p>
-
-                  </div>
-
-                  <div className="test-grid">
-
-                    {Object.entries(
-                      publicTests
                     )
-                      .filter(
-                        ([, test]) =>
-                          test.exam ===
-                          selectedExam.id
-                      )
-                      .sort(
-                        (a, b) =>
-                          Number(
-                            a[1]
-                              .testNumber ||
-                              0
-                          ) -
-                          Number(
-                            b[1]
-                              .testNumber ||
-                              0
-                          )
-                      )
-                      .map(
-                        (
-                          [id, test]
-                        ) => (
-                          <div
-                            className="test-card"
-                            key={
-                              id
-                            }
-                          >
+                  }
+                >
+                  आज का Quiz शुरू करें
+                </button>
 
-                            <h3>
-                              {
-                                test.title
-                              }
-                            </h3>
+              </div>
 
-                            <p>
-                              {
-                                test
-                                  .questions
-                                  ?.length ||
-                                0
-                              }{" "}
-                              MCQ Questions
-                            </p>
+              {/* AI */}
 
-                            <div className="price">
-                              {Number(
-                                test.price ||
-                                  0
-                              ) === 0
-                                ? "FREE"
-                                : `₹${test.price}`}
-                            </div>
+              <div className="blue-box">
 
-                            <button
-                              onClick={() =>
-                                openTest(
-                                  test
-                                )
-                              }
-                            >
-                              Start Test
-                            </button>
+                <h2>
+                  🤖 AI MCQ Generator
+                </h2>
 
-                          </div>
-                        )
-                      )}
+                <p>
+                  परीक्षा और विषय चुनकर
+                  नए MCQ तैयार करें।
+                </p>
 
-                  </div>
+                <button
+                  className="primary"
+                  onClick={() =>
+                    requireLogin(() =>
+                      setPage("mcq")
+                    )
+                  }
+                >
+                  MCQ Generator खोलें
+                </button>
 
-                  {Object.entries(
-                    publicTests
-                  ).filter(
-                    ([, test]) =>
-                      test.exam ===
-                      selectedExam.id
-                  ).length ===
-                    0 && (
-                    <div className="empty-box">
+              </div>
 
-                      <div>
-                        📚
-                      </div>
-
-                      <h2>
-                        अभी कोई Public
-                        Test नहीं है
-                      </h2>
-
-                      <p>
-                        इस परीक्षा के Test
-                        जल्द ही उपलब्ध होंगे।
-                      </p>
-
-                    </div>
-                  )}
-                </>
-              )}
             </>
           )}
 
-        {/* =================================================
-            RESOURCES
-        ================================================= */}
+          {/* TEST LIST */}
 
-        {page === "resources" && (
-          <>
-            {!user ? (
-              <LoginRequired
-                onLogin={
-                  openUserLogin
-                }
-                onBack={
-                  goHome
-                }
-              />
-            ) : (
+          {page === "tests" &&
+            selectedExam && (
               <>
+
                 <button
                   className="back"
-                  onClick={
-                    goHome
-                  }
+                  onClick={goHome}
                 >
-                  ← Home
+                  ← Home पर वापस जाएँ
                 </button>
 
                 <div className="page-title">
 
                   <div className="big-icon">
-                    📚
+                    {selectedExam.icon}
                   </div>
 
                   <h1>
-                    Study Resources
+                    {selectedExam.name}{" "}
+                    Test Series
                   </h1>
 
                   <p>
-                    NCERT, Books और
-                    परीक्षा उपयोगी
-                    अध्ययन सामग्री
+                    {selectedExam.description}
                   </p>
 
                 </div>
 
-                <div className="resource-grid">
+                <div className="test-grid">
 
-                  {visibleResources.map(
-                    (
-                      item,
-                      index
-                    ) => (
-                      <div
-                        className="resource-card"
-                        key={
-                          item.id ||
-                          index
-                        }
-                      >
-
-                        <div className="icon">
-                          {
-                            item.icon
-                          }
-                        </div>
-
-                        <h3>
-                          {
-                            item.title
-                          }
-                        </h3>
-
-                        <p>
-                          {
-                            item.text
-                          }
-                        </p>
-
-                      </div>
+                  {Object.entries(
+                    publicTests
+                  )
+                    .filter(
+                      ([, test]) =>
+                        test.exam ===
+                        selectedExam.id
                     )
-                  )}
+                    .sort(
+                      (a, b) =>
+                        Number(
+                          a[1]
+                            .testNumber ||
+                            0
+                        ) -
+                        Number(
+                          b[1]
+                            .testNumber ||
+                            0
+                        )
+                    )
+                    .map(
+                      (
+                        [id, test]
+                      ) => (
+                        <div
+                          className="test-card"
+                          key={id}
+                        >
+
+                          <h3>
+                            {test.title}
+                          </h3>
+
+                          <p>
+                            {test.questions
+                              ?.length ||
+                              0}{" "}
+                            MCQ Questions
+                          </p>
+
+                          <div className="price">
+                            {Number(
+                              test.price ||
+                                0
+                            ) === 0
+                              ? "FREE"
+                              : `₹${test.price}`}
+                          </div>
+
+                          <button
+                            onClick={() =>
+                              openTest(
+                                test
+                              )
+                            }
+                          >
+                            Start Test
+                          </button>
+
+                        </div>
+                      )
+                    )}
 
                 </div>
+
+                {Object.entries(
+                  publicTests
+                ).filter(
+                  ([, test]) =>
+                    test.exam ===
+                    selectedExam.id
+                ).length === 0 && (
+                  <div className="empty-box">
+
+                    <div>
+                      📚
+                    </div>
+
+                    <h2>
+                      अभी कोई Public Test नहीं है
+                    </h2>
+
+                    <p>
+                      इस परीक्षा के Test
+                      जल्द ही उपलब्ध होंगे।
+                    </p>
+
+                  </div>
+                )}
+
               </>
             )}
-          </>
-        )}
 
-        {/* =================================================
-            CURRENT AFFAIRS
-        ================================================= */}
+          {/* RESOURCES */}
 
-        {page === "current" && (
-          user ? (
+          {page === "resources" && (
+            <>
+
+              <button
+                className="back"
+                onClick={goHome}
+              >
+                ← Home
+              </button>
+
+              <div className="page-title">
+
+                <div className="big-icon">
+                  📚
+                </div>
+
+                <h1>
+                  Study Resources
+                </h1>
+
+                <p>
+                  NCERT, Books और
+                  परीक्षा उपयोगी अध्ययन सामग्री
+                </p>
+
+              </div>
+
+              <div className="resource-grid">
+
+                {visibleResources.map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <div
+                      className="resource-card"
+                      key={
+                        item.id ||
+                        index
+                      }
+                    >
+
+                      <div className="icon">
+                        {item.icon}
+                      </div>
+
+                      <h3>
+                        {item.title}
+                      </h3>
+
+                      <p>
+                        {item.text}
+                      </p>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+            </>
+          )}
+
+          {/* CURRENT AFFAIRS */}
+
+          {page === "current" && (
             <CurrentAffairs
               onBack={goHome}
-            />
-          ) : (
-            <LoginRequired
-              onLogin={
-                openUserLogin
-              }
-              onBack={
-                goHome
+              onMCQ={() =>
+                requireLogin(() =>
+                  setPage("mcq")
+                )
               }
             />
-          )
-        )}
+          )}
 
-        {/* =================================================
-            MCQ
-        ================================================= */}
+          {/* MCQ */}
 
-        {page === "mcq" && (
-          user ? (
+          {page === "mcq" && (
             <>
               <button
                 className="back"
-                onClick={
-                  goHome
-                }
+                onClick={goHome}
               >
                 ← Home
               </button>
 
               <AIMCQGenerator />
             </>
-          ) : (
-            <LoginRequired
-              onLogin={
-                openUserLogin
-              }
-              onBack={
-                goHome
-              }
-            />
-          )
-        )}
+          )}
 
-      </main>
+        </main>
 
-      {/* =================================================
-          FOOTER
-      ================================================= */}
+        {/* FOOTER */}
 
-      <footer className="footer">
+        <footer className="footer">
 
-        <h2>
-          📚 Exam Test
-        </h2>
+          <h2>
+            📚 Exam Test
+          </h2>
 
-        <p>
-          Learn Today |
-          Lead Tomorrow
-        </p>
+          <p>
+            Learn Today |
+            Lead Tomorrow
+          </p>
 
-        <p
-          style={{
-            marginTop: "15px",
-          }}
-        >
-          © 2026 Exam Test.
-          All Rights Reserved.
-        </p>
+          <p
+            style={{
+              marginTop: "15px",
+            }}
+          >
+            © 2026 Exam Test.
+            All Rights Reserved.
+          </p>
 
-      </footer>
+        </footer>
 
-    </div>
+      </div>
+    </>
   );
 }
