@@ -1,39 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-import {
-  getApps,
-  getApp,
-  initializeApp,
-} from "firebase/app";
-
-import {
-  getDatabase,
-  ref,
-  onValue,
-  set,
-  update,
-} from "firebase/database";
-
-import firebaseConfig from "../firebase-config.json";
-
-/* ======================================================
-   FIREBASE
-====================================================== */
-
-const firebaseApp = getApps().length
-  ? getApp()
-  : initializeApp({
-      ...firebaseConfig,
-      databaseURL:
-        firebaseConfig.databaseURL ||
-        "https://study-with-power-f6914-default-rtdb.asia-southeast1.firebasedatabase.app",
-    });
-
-const db = getDatabase(firebaseApp);
-
-/* ======================================================
-   HELPERS
-====================================================== */
+import "./AdminPanel.css";
 
 function normalizeMobile(value) {
   return String(value || "")
@@ -41,863 +7,504 @@ function normalizeMobile(value) {
     .slice(-10);
 }
 
-function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-
-  try {
-    return new Date(value).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return value;
-  }
-}
-
-/* ======================================================
-   COMPONENT
-====================================================== */
-
 export default function PasswordResetAdmin() {
-  const [requests, setRequests] = useState({});
-  const [loading, setLoading] = useState(true);
-
-  const [mobile, setMobile] = useState("");
-  const [manualOtp, setManualOtp] = useState("");
-
-  const [selectedRequest, setSelectedRequest] = useState(null);
-
-  const [generating, setGenerating] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(null);
 
   const [message, setMessage] = useState("");
 
-  /* ====================================================
-     LOAD RESET REQUESTS
-  ==================================================== */
-
-  useEffect(() => {
-    const requestsRef = ref(db, "passwordResetRequests");
-
-    const unsubscribe = onValue(
-      requestsRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setRequests(snapshot.val() || {});
-        } else {
-          setRequests({});
-        }
-
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Password reset requests:", error);
-
-        setMessage(
-          "❌ Firebase से password reset requests पढ़ने में समस्या हुई।"
-        );
-
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
-
-  /* ====================================================
-     REQUEST LIST
-  ==================================================== */
-
-  const requestList = Object.entries(requests)
-    .map(([id, data]) => ({
-      id,
-      ...data,
-    }))
-    .sort((a, b) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
-
-      return timeB - timeA;
-    });
-
-  /* ====================================================
-     GENERATE OTP
-  ==================================================== */
-
-  const generateForRequest = async (request) => {
-    if (!request?.mobile) {
-      alert("Mobile Number नहीं मिला।");
-      return;
-    }
-
-    const cleanMobile = normalizeMobile(request.mobile);
-
-    if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("Invalid Mobile Number।");
-      return;
-    }
-
+  // =====================================================
+  // LOAD PASSWORD RESET REQUESTS
+  // =====================================================
+  const loadRequests = async () => {
     try {
-      setGenerating(true);
+      setLoading(true);
       setMessage("");
 
-      const otp = generateOTP();
-
-      const requestRef = ref(
-        db,
-        `passwordResetRequests/${request.id}`
-      );
-
-      await update(requestRef, {
-        mobile: cleanMobile,
-        otp,
-        otpGeneratedAt: new Date().toISOString(),
-        otpStatus: "generated",
-        status: "otp-generated",
+      const response = await fetch("/api/password-reset?action=list", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
       });
-
-      setMobile(cleanMobile);
-      setManualOtp(otp);
-      setSelectedRequest({
-        ...request,
-        mobile: cleanMobile,
-        otp,
-      });
-
-      setMessage(
-        `✅ OTP generate हो गया: ${otp}`
-      );
-
-      alert(
-        `✅ OTP Generate हो गया\n\nMobile: ${cleanMobile}\nOTP: ${otp}`
-      );
-    } catch (error) {
-      console.error("Generate OTP:", error);
-
-      alert(
-        "❌ OTP Generate नहीं हुआ:\n" +
-          error.message
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  /* ====================================================
-     SEND OTP TO WHATSAPP
-  ==================================================== */
-
-  const sendOTPWhatsApp = async () => {
-    const cleanMobile = normalizeMobile(mobile);
-
-    if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("कृपया 10 अंकों का Mobile Number डालें।");
-      return;
-    }
-
-    if (!/^\d{6}$/.test(manualOtp)) {
-      alert("6 अंकों का OTP होना चाहिए।");
-      return;
-    }
-
-    try {
-      setSending(true);
-      setMessage("");
-
-      const response = await fetch(
-        "/api/password-reset",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "sendOtp",
-            mobile: cleanMobile,
-            otp: manualOtp,
-          }),
-        }
-      );
 
       const text = await response.text();
 
-      let data = {};
+      let data;
 
       try {
         data = JSON.parse(text);
-      } catch {
+      } catch (jsonError) {
+        console.error("Invalid JSON:", text);
+
         throw new Error(
-          "Password Reset API ने JSON response नहीं दिया। Vercel में api/password-reset.js check करें।"
+          "API से JSON response नहीं मिला। Vercel पर /api/password-reset.js check करें।"
         );
       }
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-            data.error ||
-            "OTP भेजने में समस्या हुई।"
+          data.message || "Password reset requests load नहीं हुईं।"
         );
       }
 
-      if (selectedRequest?.id) {
-        await update(
-          ref(
-            db,
-            `passwordResetRequests/${selectedRequest.id}`
-          ),
-          {
-            otp: manualOtp,
-            otpSentAt: new Date().toISOString(),
-            otpStatus: "sent",
-            status: "otp-sent",
-          }
-        );
-      }
-
-      setMessage(
-        `✅ OTP ${cleanMobile} पर WhatsApp भेजने की request सफल हुई।`
-      );
-
-      alert(
-        data.message ||
-          "✅ OTP WhatsApp पर भेज दिया गया।"
-      );
+      setRequests(Array.isArray(data.requests) ? data.requests : []);
     } catch (error) {
-      console.error("Send OTP:", error);
-
-      alert(
-        "❌ WhatsApp OTP Error:\n" +
-          error.message
-      );
+      console.error("Load requests:", error);
+      setMessage("❌ " + error.message);
     } finally {
-      setSending(false);
+      setLoading(false);
     }
   };
 
-  /* ====================================================
-     MANUAL OTP SAVE
-  ==================================================== */
+  // =====================================================
+  // GENERATE OTP
+  // =====================================================
+  const generateOtp = async (request) => {
+    const mobile = normalizeMobile(request.mobile);
 
-  const saveManualOTP = async () => {
-    const cleanMobile = normalizeMobile(mobile);
-
-    if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("कृपया सही Mobile Number डालें।");
-      return;
-    }
-
-    if (!/^\d{6}$/.test(manualOtp)) {
-      alert("OTP 6 अंकों का होना चाहिए।");
+    if (!/^\d{10}$/.test(mobile)) {
+      alert("Invalid mobile number");
       return;
     }
 
     try {
-      setGenerating(true);
+      setGenerating(request.id || mobile);
+      setMessage("");
 
-      let requestId = selectedRequest?.id;
-
-      if (!requestId) {
-        requestId = `${cleanMobile}_${Date.now()}`;
-      }
-
-      await set(
-        ref(
-          db,
-          `passwordResetRequests/${requestId}`
-        ),
-        {
-          mobile: cleanMobile,
-          otp: manualOtp,
-          otpGeneratedAt:
-            new Date().toISOString(),
-          otpStatus: "generated",
-          status: "otp-generated",
-        }
-      );
-
-      setSelectedRequest({
-        id: requestId,
-        mobile: cleanMobile,
-        otp: manualOtp,
+      const response = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "generate",
+          mobile,
+        }),
       });
 
-      setMessage(
-        "✅ OTP Firebase में save हो गया।"
-      );
+      const text = await response.text();
 
-      alert("✅ OTP successfully save हो गया।");
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (jsonError) {
+        console.error("Invalid JSON:", text);
+
+        throw new Error(
+          "API JSON नहीं भेज रही है। Vercel में /api/password-reset.js मौजूद है या नहीं देखें।"
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || "OTP generate नहीं हुआ।");
+      }
+
+      if (data.otp) {
+        alert(
+          `✅ OTP Generate हो गया\n\nMobile: ${mobile}\nOTP: ${data.otp}\n\nइस OTP को User को WhatsApp पर भेजें।`
+        );
+      } else {
+        alert(
+          "✅ OTP Generate हो गया।\n" +
+            (data.message || "OTP भेजने की प्रक्रिया पूरी हुई।")
+        );
+      }
+
+      await loadRequests();
     } catch (error) {
-      console.error(error);
-
-      alert(
-        "❌ OTP save नहीं हुआ:\n" +
-          error.message
-      );
+      console.error("Generate OTP:", error);
+      alert("❌ " + error.message);
     } finally {
-      setGenerating(false);
+      setGenerating(null);
     }
   };
 
-  /* ====================================================
-     SELECT REQUEST
-  ==================================================== */
+  // =====================================================
+  // SEND OTP / WHATSAPP
+  // =====================================================
+  const sendOtpWhatsApp = async (request) => {
+    const mobile = normalizeMobile(request.mobile);
 
-  const selectRequest = (request) => {
-    setSelectedRequest(request);
+    if (!/^\d{10}$/.test(mobile)) {
+      alert("Invalid mobile number");
+      return;
+    }
 
-    setMobile(
-      normalizeMobile(request.mobile)
+    const otp = request.otp;
+
+    if (!otp) {
+      alert("पहले Generate OTP करें।");
+      return;
+    }
+
+    try {
+      setGenerating(`send-${request.id || mobile}`);
+
+      const response = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "send-whatsapp",
+          mobile,
+          otp,
+        }),
+      });
+
+      const text = await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (jsonError) {
+        console.error("Invalid JSON:", text);
+
+        throw new Error(
+          "WhatsApp API का JSON response नहीं मिला।"
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "WhatsApp OTP भेजा नहीं जा सका।"
+        );
+      }
+
+      alert(
+        "✅ OTP WhatsApp भेजने की request सफल हुई।"
+      );
+
+      await loadRequests();
+    } catch (error) {
+      console.error("WhatsApp:", error);
+      alert("❌ " + error.message);
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  // =====================================================
+  // DELETE / CLEAR REQUEST
+  // =====================================================
+  const clearRequest = async (request) => {
+    const mobile = normalizeMobile(request.mobile);
+
+    if (!mobile) return;
+
+    const confirmDelete = window.confirm(
+      `क्या आप ${mobile} की password reset request हटाना चाहते हैं?`
     );
 
-    setManualOtp(request.otp || "");
+    if (!confirmDelete) return;
 
-    setMessage("");
+    try {
+      const response = await fetch("/api/password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          action: "clear",
+          mobile,
+        }),
+      });
+
+      const text = await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(
+          "API ने valid JSON response नहीं दिया।"
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Request delete नहीं हुई।"
+        );
+      }
+
+      await loadRequests();
+    } catch (error) {
+      console.error("Clear request:", error);
+      alert("❌ " + error.message);
+    }
   };
 
-  /* ====================================================
-     CLEAR FORM
-  ==================================================== */
+  // =====================================================
+  // LOAD ON OPEN
+  // =====================================================
+  useEffect(() => {
+    loadRequests();
+  }, []);
 
-  const clearForm = () => {
-    setSelectedRequest(null);
-    setMobile("");
-    setManualOtp("");
-    setMessage("");
-  };
-
-  /* ====================================================
-     UI
-  ==================================================== */
-
+  // =====================================================
+  // UI
+  // =====================================================
   return (
     <div
       style={{
         maxWidth: "1100px",
-        margin: "0 auto",
+        margin: "20px auto",
         padding: "20px",
-        fontFamily:
-          "Arial, Helvetica, sans-serif",
       }}
     >
-      {/* HEADER */}
-
       <div
         style={{
-          background:
-            "linear-gradient(135deg,#1d4ed8,#2563eb)",
-          color: "#fff",
-          borderRadius: "18px",
-          padding: "24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "10px",
+          flexWrap: "wrap",
           marginBottom: "20px",
-          boxShadow:
-            "0 8px 25px rgba(0,0,0,.15)",
         }}
       >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "28px",
-          }}
-        >
-          🔑 Password Reset Admin
-        </h1>
+        <div>
+          <h1 style={{ marginBottom: "5px" }}>
+            🔑 Password Reset Admin
+          </h1>
 
-        <p
+          <p style={{ marginTop: 0 }}>
+            User के Forgot Password requests यहाँ दिखाई देंगी।
+          </p>
+        </div>
+
+        <button
+          onClick={loadRequests}
+          disabled={loading}
           style={{
-            margin: "8px 0 0",
-            opacity: 0.95,
+            padding: "10px 18px",
+            borderRadius: "8px",
+            border: "none",
+            cursor: "pointer",
           }}
         >
-          Exam Test — Mobile OTP Password Reset
-        </p>
+          {loading ? "⏳ Loading..." : "🔄 Refresh"}
+        </button>
       </div>
-
-      {/* MESSAGE */}
 
       {message && (
         <div
           style={{
-            background: "#ecfdf5",
-            color: "#065f46",
-            border:
-              "1px solid #a7f3d0",
-            borderRadius: "12px",
-            padding: "12px 15px",
-            marginBottom: "18px",
-            fontWeight: "600",
+            background: "#fee2e2",
+            color: "#991b1b",
+            padding: "14px",
+            borderRadius: "10px",
+            marginBottom: "20px",
           }}
         >
           {message}
         </div>
       )}
 
-      {/* MANUAL OTP PANEL */}
-
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: "16px",
-          padding: "20px",
-          marginBottom: "25px",
-          boxShadow:
-            "0 4px 15px rgba(0,0,0,.08)",
-          border:
-            "1px solid #e5e7eb",
-        }}
-      >
-        <h2
+      {loading ? (
+        <div
           style={{
-            marginTop: 0,
-            color: "#111827",
+            textAlign: "center",
+            padding: "40px",
           }}
         >
-          📲 OTP Generate / Send
-        </h2>
+          ⏳ Requests load हो रही हैं...
+        </div>
+      ) : requests.length === 0 ? (
+        <div
+          style={{
+            background: "#f8fafc",
+            borderRadius: "12px",
+            padding: "40px",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "45px" }}>📭</div>
 
+          <h3>कोई Password Reset Request नहीं है</h3>
+
+          <p>
+            जब कोई User Forgot Password करेगा,
+            request यहाँ दिखाई देगी।
+          </p>
+        </div>
+      ) : (
         <div
           style={{
             display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit,minmax(220px,1fr))",
             gap: "15px",
           }}
         >
-          {/* MOBILE */}
+          {requests.map((request, index) => {
+            const mobile = normalizeMobile(request.mobile);
 
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontWeight: "700",
-                marginBottom: "7px",
-              }}
-            >
-              📱 Mobile Number
-            </label>
+            const requestId =
+              request.id || request.uid || mobile || index;
 
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={10}
-              value={mobile}
-              placeholder="10 digit mobile"
-              onChange={(e) =>
-                setMobile(
-                  e.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 10)
-                )
-              }
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "13px",
-                border:
-                  "1px solid #d1d5db",
-                borderRadius: "10px",
-                fontSize: "16px",
-              }}
-            />
-          </div>
+            const isGenerating =
+              generating === requestId;
 
-          {/* OTP */}
+            const isSending =
+              generating === `send-${requestId}`;
 
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontWeight: "700",
-                marginBottom: "7px",
-              }}
-            >
-              🔢 OTP
-            </label>
+            return (
+              <div
+                key={requestId}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "14px",
+                  padding: "18px",
+                  boxShadow:
+                    "0 3px 12px rgba(0,0,0,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "15px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: "0 0 8px" }}>
+                      📱 {mobile}
+                    </h3>
 
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={6}
-              value={manualOtp}
-              placeholder="6 digit OTP"
-              onChange={(e) =>
-                setManualOtp(
-                  e.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 6)
-                )
-              }
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "13px",
-                border:
-                  "1px solid #d1d5db",
-                borderRadius: "10px",
-                fontSize: "18px",
-                letterSpacing: "4px",
-              }}
-            />
-          </div>
-        </div>
+                    {request.name && (
+                      <p style={{ margin: "4px 0" }}>
+                        👤 <strong>{request.name}</strong>
+                      </p>
+                    )}
 
-        {/* BUTTONS */}
-
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "10px",
-            marginTop: "18px",
-          }}
-        >
-          <button
-            onClick={() => {
-              const cleanMobile =
-                normalizeMobile(mobile);
-
-              if (
-                !/^\d{10}$/.test(
-                  cleanMobile
-                )
-              ) {
-                alert(
-                  "कृपया 10 अंकों का Mobile Number डालें।"
-                );
-                return;
-              }
-
-              const otp =
-                generateOTP();
-
-              setManualOtp(otp);
-
-              setMessage(
-                `OTP Generate हुआ: ${otp}`
-              );
-            }}
-            disabled={generating}
-            style={buttonStyle(
-              "#2563eb"
-            )}
-          >
-            🎲 Generate OTP
-          </button>
-
-          <button
-            onClick={saveManualOTP}
-            disabled={generating}
-            style={buttonStyle(
-              "#059669"
-            )}
-          >
-            💾 Save OTP
-          </button>
-
-          <button
-            onClick={sendOTPWhatsApp}
-            disabled={sending}
-            style={buttonStyle(
-              "#16a34a"
-            )}
-          >
-            {sending
-              ? "⏳ Sending..."
-              : "📲 WhatsApp पर भेजें"}
-          </button>
-
-          <button
-            onClick={clearForm}
-            style={buttonStyle(
-              "#6b7280"
-            )}
-          >
-            ✖ Clear
-          </button>
-        </div>
-      </div>
-
-      {/* REQUEST LIST */}
-
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: "16px",
-          padding: "20px",
-          boxShadow:
-            "0 4px 15px rgba(0,0,0,.08)",
-          border:
-            "1px solid #e5e7eb",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent:
-              "space-between",
-            alignItems: "center",
-            gap: "10px",
-            flexWrap: "wrap",
-            marginBottom: "15px",
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-            }}
-          >
-            📋 Password Reset Requests
-          </h2>
-
-          <span
-            style={{
-              background: "#eff6ff",
-              color: "#1d4ed8",
-              padding:
-                "7px 12px",
-              borderRadius: "20px",
-              fontWeight: "700",
-            }}
-          >
-            {requestList.length} Requests
-          </span>
-        </div>
-
-        {loading ? (
-          <div
-            style={{
-              padding: "30px",
-              textAlign: "center",
-            }}
-          >
-            ⏳ Requests loading...
-          </div>
-        ) : requestList.length === 0 ? (
-          <div
-            style={{
-              padding: "35px 15px",
-              textAlign: "center",
-              color: "#6b7280",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "45px",
-              }}
-            >
-              📭
-            </div>
-
-            <p>
-              अभी कोई Password Reset
-              Request नहीं है।
-            </p>
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gap: "12px",
-            }}
-          >
-            {requestList.map(
-              (request) => {
-                const active =
-                  selectedRequest?.id ===
-                  request.id;
-
-                return (
-                  <div
-                    key={request.id}
-                    style={{
-                      border:
-                        active
-                          ? "2px solid #2563eb"
-                          : "1px solid #e5e7eb",
-                      borderRadius:
-                        "14px",
-                      padding: "15px",
-                      background:
-                        active
-                          ? "#eff6ff"
-                          : "#fafafa",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display:
-                          "flex",
-                        justifyContent:
-                          "space-between",
-                        gap: "12px",
-                        flexWrap:
-                          "wrap",
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize:
-                              "18px",
-                            fontWeight:
-                              "700",
-                          }}
-                        >
-                          📱{" "}
-                          {normalizeMobile(
-                            request.mobile
-                          )}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop:
-                              "6px",
-                            color:
-                              "#6b7280",
-                            fontSize:
-                              "14px",
-                          }}
-                        >
-                          🕒{" "}
-                          {formatDate(
-                            request.createdAt
-                          )}
-                        </div>
-
-                        {request.status && (
-                          <div
-                            style={{
-                              marginTop:
-                                "6px",
-                              fontSize:
-                                "14px",
-                            }}
-                          >
-                            Status:{" "}
-                            <strong>
-                              {
-                                request.status
-                              }
-                            </strong>
-                          </div>
-                        )}
-
-                        {request.otp && (
-                          <div
-                            style={{
-                              marginTop:
-                                "8px",
-                              fontWeight:
-                                "700",
-                              color:
-                                "#7c3aed",
-                            }}
-                          >
-                            🔢 OTP:{" "}
-                            {
-                              request.otp
-                            }
-                          </div>
-                        )}
-                      </div>
-
-                      <div
+                    {request.createdAt && (
+                      <p
                         style={{
-                          display:
-                            "flex",
-                          gap: "8px",
-                          flexWrap:
-                            "wrap",
-                          alignItems:
-                            "center",
+                          margin: "4px 0",
+                          color: "#64748b",
                         }}
                       >
-                        <button
-                          onClick={() =>
-                            selectRequest(
-                              request
-                            )
-                          }
-                          style={buttonStyle(
-                            "#4b5563"
-                          )}
-                        >
-                          👁️ Open
-                        </button>
+                        🕐{" "}
+                        {new Date(
+                          request.createdAt
+                        ).toLocaleString("hi-IN")}
+                      </p>
+                    )}
 
-                        <button
-                          onClick={() =>
-                            generateForRequest(
-                              request
-                            )
-                          }
-                          disabled={
-                            generating
-                          }
-                          style={buttonStyle(
-                            "#2563eb"
-                          )}
-                        >
-                          🔢 Generate OTP
-                        </button>
-                      </div>
-                    </div>
+                    {request.otp && (
+                      <p
+                        style={{
+                          margin: "10px 0",
+                          fontSize: "20px",
+                          fontWeight: "bold",
+                          letterSpacing: "4px",
+                        }}
+                      >
+                        🔢 OTP: {request.otp}
+                      </p>
+                    )}
                   </div>
-                );
-              }
-            )}
-          </div>
-        )}
-      </div>
 
-      {/* IMPORTANT INFO */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      onClick={() =>
+                        generateOtp({
+                          ...request,
+                          id: requestId,
+                        })
+                      }
+                      disabled={isGenerating}
+                      style={{
+                        padding: "10px 14px",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {isGenerating
+                        ? "⏳ Generating..."
+                        : "🔢 Generate OTP"}
+                    </button>
+
+                    {request.otp && (
+                      <button
+                        onClick={() =>
+                          sendOtpWhatsApp({
+                            ...request,
+                            id: requestId,
+                          })
+                        }
+                        disabled={isSending}
+                        style={{
+                          padding: "10px 14px",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {isSending
+                          ? "⏳ Sending..."
+                          : "📲 WhatsApp भेजें"}
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() =>
+                        clearRequest({
+                          ...request,
+                          id: requestId,
+                        })
+                      }
+                      style={{
+                        padding: "10px 14px",
+                        border: "none",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      🗑️ Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div
         style={{
-          marginTop: "20px",
-          background: "#fff7ed",
-          border:
-            "1px solid #fed7aa",
-          color: "#9a3412",
-          borderRadius: "14px",
+          marginTop: "25px",
           padding: "15px",
-          lineHeight: "1.6",
+          background: "#eff6ff",
+          borderRadius: "10px",
+          color: "#1e3a8a",
         }}
       >
-        <strong>
-          ⚠️ जरूरी:
-        </strong>
-        <br />
-        WhatsApp OTP भेजने के लिए
-        Vercel में{" "}
-        <code>
-          /api/password-reset
-        </code>{" "}
-        API का{" "}
-        <code>sendOtp</code>{" "}
-        action मौजूद होना चाहिए।
+        <strong>ℹ️ जरूरी:</strong>
+
+        <p style={{ marginBottom: 0 }}>
+          यह Admin Panel `/api/password-reset` API पर निर्भर करता है।
+          अगर Vercel पर यह API मौजूद नहीं है, तो
+          <b> Unexpected token '&lt;' </b>
+          वाला error आएगा।
+        </p>
       </div>
     </div>
   );
-}
-
-/* ======================================================
-   BUTTON STYLE
-====================================================== */
-
-function buttonStyle(background) {
-  return {
-    background,
-    color: "#fff",
-    border: "none",
-    borderRadius: "10px",
-    padding: "11px 15px",
-    fontSize: "15px",
-    fontWeight: "700",
-    cursor: "pointer",
-  };
 }
