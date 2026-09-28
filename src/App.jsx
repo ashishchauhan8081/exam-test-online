@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import "./App.css";
 
 import {
@@ -28,7 +33,6 @@ import firebaseConfig from "./firebase-config.json";
 import AdminPanel from "./components/AdminPanel";
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
-import PasswordResetAdmin from "./components/PasswordResetAdmin";
 
 /* ======================================================
    FIREBASE
@@ -51,6 +55,7 @@ const db = getDatabase(firebaseApp);
 ====================================================== */
 
 const APP_NAME = "Exam Test";
+
 const ADMIN_EMAIL = "cciashish@gmail.com";
 
 /* ======================================================
@@ -58,18 +63,78 @@ const ADMIN_EMAIL = "cciashish@gmail.com";
 ====================================================== */
 
 const exams = [
-  { id: "upsc", name: "UPSC", icon: "🇮🇳", color: "#fee2e2" },
-  { id: "uppcs", name: "UPPCS", icon: "🏛️", color: "#fef3c7" },
-  { id: "uppet", name: "UP PET", icon: "🎯", color: "#dcfce7" },
-  { id: "bpsc", name: "BPSC", icon: "🏛️", color: "#ede9fe" },
-  { id: "mppsc", name: "MPPSC", icon: "📚", color: "#dbeafe" },
-  { id: "ssc", name: "SSC", icon: "📝", color: "#fce7f3" },
-  { id: "railway", name: "Railway", icon: "🚆", color: "#e0f2fe" },
-  { id: "banking", name: "Banking", icon: "🏦", color: "#dcfce7" },
-  { id: "upsssc", name: "UPSSSC", icon: "📖", color: "#f3e8ff" },
-  { id: "roaro", name: "RO/ARO", icon: "📜", color: "#fef3c7" },
-  { id: "police", name: "Police", icon: "👮", color: "#fee2e2" },
-  { id: "teaching", name: "Teaching", icon: "👨‍🏫", color: "#dbeafe" },
+  {
+    id: "upsc",
+    name: "UPSC",
+    icon: "🇮🇳",
+    color: "#fee2e2",
+  },
+  {
+    id: "uppcs",
+    name: "UPPCS",
+    icon: "🏛️",
+    color: "#fef3c7",
+  },
+  {
+    id: "uppet",
+    name: "UP PET",
+    icon: "🎯",
+    color: "#dcfce7",
+  },
+  {
+    id: "bpsc",
+    name: "BPSC",
+    icon: "🏛️",
+    color: "#ede9fe",
+  },
+  {
+    id: "mppsc",
+    name: "MPPSC",
+    icon: "📚",
+    color: "#dbeafe",
+  },
+  {
+    id: "ssc",
+    name: "SSC",
+    icon: "📝",
+    color: "#fce7f3",
+  },
+  {
+    id: "railway",
+    name: "Railway",
+    icon: "🚆",
+    color: "#e0f2fe",
+  },
+  {
+    id: "banking",
+    name: "Banking",
+    icon: "🏦",
+    color: "#dcfce7",
+  },
+  {
+    id: "upsssc",
+    name: "UPSSSC",
+    icon: "📖",
+    color: "#f3e8ff",
+  },
+  {
+    id: "roaro",
+    name: "RO/ARO",
+    icon: "📜",
+    color: "#fef3c7",
+  },
+  {
+    id: "police",
+    name: "Police",
+    icon: "👮",
+    color: "#fee2e2",
+  },
+  {
+    id: "teaching",
+    name: "Teaching",
+    icon: "👨‍🏫",
+    color: "#dbeafe",
+  },
 ];
 
 /* ======================================================
@@ -83,39 +148,57 @@ function normalizeMobile(value) {
 }
 
 /*
-  Firebase Email/Password authentication is used internally.
-  The user sees only Mobile Number + Password.
+  Firebase Email/Password Auth internally uses an email.
+  User को केवल Mobile Number दिखाई देगा.
 */
+
 function mobileToAuthEmail(mobile) {
   return `${normalizeMobile(mobile)}@studywithpower.app`;
 }
+
+/* ======================================================
+   GET USER DATA
+====================================================== */
 
 async function getUserData(uid) {
   if (!uid) return null;
 
   try {
-    const snap = await get(ref(db, `users/${uid}`));
-    return snap.exists() ? snap.val() : null;
+    const snapshot = await get(
+      ref(db, `users/${uid}`)
+    );
+
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+
+    return null;
   } catch (error) {
-    console.error("getUserData:", error);
+    console.error(
+      "getUserData Error:",
+      error
+    );
+
     return null;
   }
 }
 
 /* ======================================================
-   AUTH CARD STYLE
+   AUTH SHELL
 ====================================================== */
 
 function AuthShell({ children }) {
   return (
     <div className="auth-overlay">
-      <div className="auth-card">{children}</div>
+      <div className="auth-card">
+        {children}
+      </div>
     </div>
   );
 }
 
 /* ======================================================
-   LOGIN PAGE
+   USER LOGIN
 ====================================================== */
 
 function LoginPage({
@@ -129,13 +212,16 @@ function LoginPage({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const login = async (e) => {
-    e.preventDefault();
+  const handleLogin = async (event) => {
+    event.preventDefault();
 
-    const cleanMobile = normalizeMobile(mobile);
+    const cleanMobile =
+      normalizeMobile(mobile);
 
     if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      alert(
+        "कृपया 10 अंकों का Mobile Number डालें।"
+      );
       return;
     }
 
@@ -147,33 +233,50 @@ function LoginPage({
     try {
       setLoading(true);
 
-      const result = await signInWithEmailAndPassword(
-        auth,
-        mobileToAuthEmail(cleanMobile),
-        password
-      );
+      const result =
+        await signInWithEmailAndPassword(
+          auth,
+          mobileToAuthEmail(cleanMobile),
+          password
+        );
 
       if (
         result.user.email &&
-        result.user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+        result.user.email.toLowerCase() ===
+          ADMIN_EMAIL.toLowerCase()
       ) {
         await signOut(auth);
-        alert("Admin के लिए Admin Login इस्तेमाल करें।");
+
+        alert(
+          "❌ Admin के लिए Admin Login इस्तेमाल करें।"
+        );
+
         return;
       }
 
       onSuccess?.(result.user);
     } catch (error) {
-      console.error(error);
+      console.error(
+        "User Login Error:",
+        error
+      );
 
       if (
-        error.code === "auth/invalid-credential" ||
-        error.code === "auth/user-not-found" ||
-        error.code === "auth/wrong-password"
+        error.code ===
+          "auth/invalid-credential" ||
+        error.code ===
+          "auth/user-not-found" ||
+        error.code ===
+          "auth/wrong-password"
       ) {
-        alert("❌ Mobile Number या Password गलत है।");
+        alert(
+          "❌ Mobile Number या Password गलत है।"
+        );
       } else {
-        alert("❌ Login Error:\n" + error.message);
+        alert(
+          "❌ Login Error:\n" +
+            error.message
+        );
       }
     } finally {
       setLoading(false);
@@ -182,12 +285,22 @@ function LoginPage({
 
   return (
     <AuthShell>
-      <div className="auth-icon">📱</div>
-      <h1>User Login</h1>
-      <p>{APP_NAME} में Mobile Number और Password से Login करें</p>
+      <div className="auth-icon">
+        📱
+      </div>
 
-      <form onSubmit={login}>
-        <label>📱 Mobile Number</label>
+      <h1>User Login</h1>
+
+      <p>
+        {APP_NAME} में Mobile Number और
+        Password से Login करें
+      </p>
+
+      <form onSubmit={handleLogin}>
+        <label>
+          📱 Mobile Number
+        </label>
+
         <input
           type="tel"
           inputMode="numeric"
@@ -195,16 +308,25 @@ function LoginPage({
           placeholder="10 digit mobile number"
           value={mobile}
           onChange={(e) =>
-            setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+            setMobile(
+              e.target.value
+                .replace(/\D/g, "")
+                .slice(0, 10)
+            )
           }
         />
 
-        <label>🔐 Password</label>
+        <label>
+          🔐 Password
+        </label>
+
         <input
           type="password"
-          placeholder="Account बनाते समय बनाया गया Password"
+          placeholder="अपना Password डालें"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(e.target.value)
+          }
         />
 
         <button
@@ -212,24 +334,44 @@ function LoginPage({
           disabled={loading}
           className="auth-primary-btn"
         >
-          {loading ? "⏳ Login हो रहा है..." : "🔐 Login"}
+          {loading
+            ? "⏳ Login हो रहा है..."
+            : "🔐 Login"}
         </button>
       </form>
 
-      <button className="forgot-btn" onClick={onForgot}>
+      <button
+        type="button"
+        className="forgot-btn"
+        onClick={onForgot}
+      >
         🔑 Forgot Password?
       </button>
 
       <div className="auth-switch">
         नया account बनाना है?
-        <button onClick={onRegister}>Create Account</button>
+
+        <button
+          type="button"
+          onClick={onRegister}
+        >
+          Create Account
+        </button>
       </div>
 
-      <button className="admin-login-link" onClick={onAdmin}>
+      <button
+        type="button"
+        className="admin-login-link"
+        onClick={onAdmin}
+      >
         👨‍💼 Admin Login
       </button>
 
-      <button className="auth-close-btn" onClick={onClose}>
+      <button
+        type="button"
+        className="auth-close-btn"
+        onClick={onClose}
+      >
         ← Website पर वापस जाएँ
       </button>
     </AuthShell>
@@ -237,55 +379,88 @@ function LoginPage({
 }
 
 /* ======================================================
-   REGISTER PAGE
+   REGISTER
 ====================================================== */
 
-function RegisterPage({ onSuccess, onLogin, onClose }) {
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
+function RegisterPage({
+  onSuccess,
+  onLogin,
+  onClose,
+}) {
+  const [name, setName] =
+    useState("");
 
-  const register = async (e) => {
-    e.preventDefault();
+  const [mobile, setMobile] =
+    useState("");
 
-    const cleanMobile = normalizeMobile(mobile);
+  const [password, setPassword] =
+    useState("");
+
+  const [confirm, setConfirm] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const handleRegister = async (
+    event
+  ) => {
+    event.preventDefault();
+
+    const cleanMobile =
+      normalizeMobile(mobile);
 
     if (!name.trim()) {
-      alert("कृपया अपना नाम डालें।");
+      alert(
+        "कृपया अपना नाम डालें।"
+      );
       return;
     }
 
     if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      alert(
+        "कृपया 10 अंकों का Mobile Number डालें।"
+      );
       return;
     }
 
     if (password.length < 6) {
-      alert("Password कम से कम 6 characters का होना चाहिए।");
+      alert(
+        "Password कम से कम 6 characters का होना चाहिए।"
+      );
       return;
     }
 
     if (password !== confirm) {
-      alert("Password और Confirm Password समान नहीं हैं।");
+      alert(
+        "Password और Confirm Password समान नहीं हैं।"
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      const authEmail = mobileToAuthEmail(cleanMobile);
+      const authEmail =
+        mobileToAuthEmail(cleanMobile);
 
-      const result = await createUserWithEmailAndPassword(
-        auth,
-        authEmail,
-        password
+      const result =
+        await createUserWithEmailAndPassword(
+          auth,
+          authEmail,
+          password
+        );
+
+      await updateProfile(
+        result.user,
+        {
+          displayName:
+            name.trim(),
+        }
       );
 
-      await updateProfile(result.user, {
-        displayName: name.trim(),
-      });
+      const createdAt =
+        new Date().toISOString();
 
       const userData = {
         uid: result.user.uid,
@@ -293,31 +468,61 @@ function RegisterPage({ onSuccess, onLogin, onClose }) {
         mobile: cleanMobile,
         authEmail,
         preparation: "",
-        createdAt: new Date().toISOString(),
+        createdAt,
       };
 
-      await set(ref(db, `users/${result.user.uid}`), userData);
+      await set(
+        ref(
+          db,
+          `users/${result.user.uid}`
+        ),
+        userData
+      );
 
-      await set(ref(db, `mobileUsers/${cleanMobile}`), {
-        uid: result.user.uid,
-        name: name.trim(),
-        mobile: cleanMobile,
-        authEmail,
-        createdAt: userData.createdAt,
-      });
+      await set(
+        ref(
+          db,
+          `mobileUsers/${cleanMobile}`
+        ),
+        {
+          uid: result.user.uid,
+          name: name.trim(),
+          mobile: cleanMobile,
+          authEmail,
+          createdAt,
+        }
+      );
 
-      alert("✅ Account सफलतापूर्वक बन गया।");
+      alert(
+        "✅ Account सफलतापूर्वक बन गया।"
+      );
 
       onSuccess?.(result.user);
     } catch (error) {
-      console.error("Registration:", error);
+      console.error(
+        "Registration Error:",
+        error
+      );
 
-      if (error.code === "auth/email-already-in-use") {
-        alert("❌ यह Mobile Number पहले से registered है।");
-      } else if (error.code === "auth/weak-password") {
-        alert("❌ Password बहुत कमजोर है।");
+      if (
+        error.code ===
+        "auth/email-already-in-use"
+      ) {
+        alert(
+          "❌ यह Mobile Number पहले से registered है।"
+        );
+      } else if (
+        error.code ===
+        "auth/weak-password"
+      ) {
+        alert(
+          "❌ Password बहुत कमजोर है।"
+        );
       } else {
-        alert("❌ Registration Error:\n" + error.message);
+        alert(
+          "❌ Registration Error:\n" +
+            error.message
+        );
       }
     } finally {
       setLoading(false);
@@ -326,20 +531,36 @@ function RegisterPage({ onSuccess, onLogin, onClose }) {
 
   return (
     <AuthShell>
-      <div className="auth-icon">📝</div>
-      <h1>Create Account</h1>
-      <p>{APP_NAME} पर अपना account बनाएं</p>
+      <div className="auth-icon">
+        📝
+      </div>
 
-      <form onSubmit={register}>
-        <label>👤 पूरा नाम</label>
+      <h1>Create Account</h1>
+
+      <p>
+        {APP_NAME} पर अपना account बनाएं
+      </p>
+
+      <form
+        onSubmit={handleRegister}
+      >
+        <label>
+          👤 पूरा नाम
+        </label>
+
         <input
           type="text"
           placeholder="अपना नाम दर्ज करें"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) =>
+            setName(e.target.value)
+          }
         />
 
-        <label>📱 Mobile Number</label>
+        <label>
+          📱 Mobile Number
+        </label>
+
         <input
           type="tel"
           inputMode="numeric"
@@ -347,24 +568,38 @@ function RegisterPage({ onSuccess, onLogin, onClose }) {
           placeholder="10 digit mobile number"
           value={mobile}
           onChange={(e) =>
-            setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
+            setMobile(
+              e.target.value
+                .replace(/\D/g, "")
+                .slice(0, 10)
+            )
           }
         />
 
-        <label>🔐 Password बनाएं</label>
+        <label>
+          🔐 Password बनाएं
+        </label>
+
         <input
           type="password"
           placeholder="कम से कम 6 characters"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(e.target.value)
+          }
         />
 
-        <label>🔐 Confirm Password</label>
+        <label>
+          🔐 Confirm Password
+        </label>
+
         <input
           type="password"
           placeholder="Password दोबारा डालें"
           value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={(e) =>
+            setConfirm(e.target.value)
+          }
         />
 
         <button
@@ -372,16 +607,28 @@ function RegisterPage({ onSuccess, onLogin, onClose }) {
           disabled={loading}
           className="auth-primary-btn"
         >
-          {loading ? "⏳ Account बन रहा है..." : "✅ Create Account"}
+          {loading
+            ? "⏳ Account बन रहा है..."
+            : "✅ Create Account"}
         </button>
       </form>
 
       <div className="auth-switch">
         Account पहले से है?
-        <button onClick={onLogin}>Login करें</button>
+
+        <button
+          type="button"
+          onClick={onLogin}
+        >
+          Login करें
+        </button>
       </div>
 
-      <button className="auth-close-btn" onClick={onClose}>
+      <button
+        type="button"
+        className="auth-close-btn"
+        onClick={onClose}
+      >
         ← Website पर वापस जाएँ
       </button>
     </AuthShell>
@@ -392,18 +639,29 @@ function RegisterPage({ onSuccess, onLogin, onClose }) {
    EXAM SELECTION
 ====================================================== */
 
-function ExamSelectionPage({ user, onComplete, onClose }) {
-  const [selected, setSelected] = useState("");
-  const [loading, setLoading] = useState(false);
+function ExamSelectionPage({
+  user,
+  onComplete,
+  onClose,
+}) {
+  const [selected, setSelected] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
 
   const saveExam = async () => {
     if (!selected) {
-      alert("कृपया परीक्षा चुनें।");
+      alert(
+        "कृपया परीक्षा चुनें।"
+      );
       return;
     }
 
     if (!user?.uid) {
-      alert("User session नहीं मिला।");
+      alert(
+        "❌ User session नहीं मिला।"
+      );
       return;
     }
 
@@ -411,14 +669,24 @@ function ExamSelectionPage({ user, onComplete, onClose }) {
       setLoading(true);
 
       await set(
-        ref(db, `users/${user.uid}/preparation`),
+        ref(
+          db,
+          `users/${user.uid}/preparation`
+        ),
         selected
       );
 
       onComplete?.(selected);
     } catch (error) {
-      console.error(error);
-      alert("❌ परीक्षा save नहीं हुई:\n" + error.message);
+      console.error(
+        "Exam Selection Error:",
+        error
+      );
+
+      alert(
+        "❌ परीक्षा save नहीं हुई:\n" +
+          error.message
+      );
     } finally {
       setLoading(false);
     }
@@ -426,43 +694,74 @@ function ExamSelectionPage({ user, onComplete, onClose }) {
 
   return (
     <AuthShell>
-      <div className="auth-icon">🎯</div>
+      <div className="auth-icon">
+        🎯
+      </div>
 
-      <h1>आप किस परीक्षा की तैयारी कर रहे हैं?</h1>
-      <p>अपनी परीक्षा चुनें</p>
+      <h1>
+        आप किस परीक्षा की तैयारी कर रहे हैं?
+      </h1>
+
+      <p>
+        अपनी परीक्षा चुनें
+      </p>
 
       <div className="exam-selection-grid">
         {exams.map((exam) => {
-          const active = selected === exam.name;
+          const active =
+            selected === exam.name;
 
           return (
             <button
               key={exam.id}
               type="button"
-              className={`exam-select-card ${
-                active ? "active" : ""
-              }`}
-              onClick={() => setSelected(exam.name)}
+              className={
+                `exam-select-card ` +
+                (active
+                  ? "active"
+                  : "")
+              }
+              onClick={() =>
+                setSelected(
+                  exam.name
+                )
+              }
               style={{
-                background: active ? "#eff6ff" : exam.color,
+                background: active
+                  ? "#eff6ff"
+                  : exam.color,
               }}
             >
-              <span>{exam.icon}</span>
-              <strong>{exam.name}</strong>
+              <span>
+                {exam.icon}
+              </span>
+
+              <strong>
+                {exam.name}
+              </strong>
             </button>
           );
         })}
       </div>
 
       <button
+        type="button"
         className="auth-primary-btn"
-        disabled={loading || !selected}
+        disabled={
+          loading || !selected
+        }
         onClick={saveExam}
       >
-        {loading ? "⏳ Save हो रहा है..." : "Continue →"}
+        {loading
+          ? "⏳ Save हो रहा है..."
+          : "Continue →"}
       </button>
 
-      <button className="auth-close-btn" onClick={onClose}>
+      <button
+        type="button"
+        className="auth-close-btn"
+        onClick={onClose}
+      >
         ← Website पर वापस जाएँ
       </button>
     </AuthShell>
@@ -473,96 +772,150 @@ function ExamSelectionPage({ user, onComplete, onClose }) {
    FORGOT PASSWORD
 ====================================================== */
 
-function ForgotPassword({ onBack }) {
-  const [step, setStep] = useState(1);
-  const [mobile, setMobile] = useState("");
-  const [otp, setOtp] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+function ForgotPassword({
+  onBack,
+}) {
+  const [step, setStep] =
+    useState(1);
 
-  const requestOtp = async (e) => {
-    e.preventDefault();
+  const [mobile, setMobile] =
+    useState("");
 
-    const cleanMobile = normalizeMobile(mobile);
+  const [otp, setOtp] =
+    useState("");
+
+  const [newPassword, setNewPassword] =
+    useState("");
+
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const requestOtp = async (
+    event
+  ) => {
+    event.preventDefault();
+
+    const cleanMobile =
+      normalizeMobile(mobile);
 
     if (!/^\d{10}$/.test(cleanMobile)) {
-      alert("कृपया 10 अंकों का Mobile Number डालें।");
+      alert(
+        "कृपया 10 अंकों का Mobile Number डालें।"
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      const response = await fetch("/api/password-reset", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "request",
-          mobile: cleanMobile,
-        }),
-      });
+      const response =
+        await fetch(
+          "/api/password-reset",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action: "request",
+              mobile: cleanMobile,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Request failed");
+        throw new Error(
+          data.message ||
+            "Request failed"
+        );
       }
 
       setMobile(cleanMobile);
       setStep(2);
 
       alert(
-        "✅ Password reset request भेज दी गई है। Admin OTP Generate करके WhatsApp पर भेजेगा।"
+        "✅ Password reset request Admin Panel में भेज दी गई है। Admin OTP Generate करके WhatsApp पर भेजेगा।"
       );
     } catch (error) {
-      console.error(error);
-      alert("❌ " + error.message);
+      console.error(
+        "Reset Request:",
+        error
+      );
+
+      alert(
+        "❌ " +
+          error.message
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const verifyReset = async (e) => {
-    e.preventDefault();
+  const verifyReset = async (
+    event
+  ) => {
+    event.preventDefault();
 
     if (!/^\d{6}$/.test(otp)) {
-      alert("6 अंकों का OTP डालें।");
+      alert(
+        "6 अंकों का OTP डालें।"
+      );
       return;
     }
 
     if (newPassword.length < 6) {
-      alert("नया Password कम से कम 6 characters का होना चाहिए।");
+      alert(
+        "नया Password कम से कम 6 characters का होना चाहिए।"
+      );
       return;
     }
 
-    if (newPassword !== confirmPassword) {
-      alert("New Password और Confirm Password समान नहीं हैं।");
+    if (
+      newPassword !==
+      confirmPassword
+    ) {
+      alert(
+        "New Password और Confirm Password समान नहीं हैं।"
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      const response = await fetch("/api/password-reset", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "verify",
-          mobile,
-          otp,
-          newPassword,
-        }),
-      });
+      const response =
+        await fetch(
+          "/api/password-reset",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action: "verify",
+              mobile,
+              otp,
+              newPassword,
+            }),
+          }
+        );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "OTP verification failed");
+        throw new Error(
+          data.message ||
+            "OTP verification failed"
+        );
       }
 
       alert(
@@ -571,8 +924,15 @@ function ForgotPassword({ onBack }) {
 
       onBack?.();
     } catch (error) {
-      console.error(error);
-      alert("❌ " + error.message);
+      console.error(
+        "Reset Verify:",
+        error
+      );
+
+      alert(
+        "❌ " +
+          error.message
+      );
     } finally {
       setLoading(false);
     }
@@ -580,15 +940,27 @@ function ForgotPassword({ onBack }) {
 
   return (
     <AuthShell>
-      <div className="auth-icon">🔑</div>
-      <h1>Forgot Password</h1>
+      <div className="auth-icon">
+        🔑
+      </div>
+
+      <h1>
+        Forgot Password
+      </h1>
 
       {step === 1 ? (
         <>
-          <p>Registered Mobile Number डालें</p>
+          <p>
+            Registered Mobile Number डालें
+          </p>
 
-          <form onSubmit={requestOtp}>
-            <label>📱 Mobile Number</label>
+          <form
+            onSubmit={requestOtp}
+          >
+            <label>
+              📱 Mobile Number
+            </label>
+
             <input
               type="tel"
               inputMode="numeric"
@@ -597,7 +969,9 @@ function ForgotPassword({ onBack }) {
               value={mobile}
               onChange={(e) =>
                 setMobile(
-                  e.target.value.replace(/\D/g, "").slice(0, 10)
+                  e.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 10)
                 )
               }
             />
@@ -615,10 +989,18 @@ function ForgotPassword({ onBack }) {
         </>
       ) : (
         <>
-          <p>Admin द्वारा भेजा गया OTP और नया Password डालें</p>
+          <p>
+            Admin द्वारा भेजा गया OTP और
+            नया Password डालें
+          </p>
 
-          <form onSubmit={verifyReset}>
-            <label>🔢 OTP</label>
+          <form
+            onSubmit={verifyReset}
+          >
+            <label>
+              🔢 OTP
+            </label>
+
             <input
               type="tel"
               inputMode="numeric"
@@ -627,26 +1009,40 @@ function ForgotPassword({ onBack }) {
               value={otp}
               onChange={(e) =>
                 setOtp(
-                  e.target.value.replace(/\D/g, "").slice(0, 6)
+                  e.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 6)
                 )
               }
             />
 
-            <label>🔐 New Password</label>
+            <label>
+              🔐 New Password
+            </label>
+
             <input
               type="password"
               placeholder="नया Password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={(e) =>
+                setNewPassword(
+                  e.target.value
+                )
+              }
             />
 
-            <label>🔐 Confirm New Password</label>
+            <label>
+              🔐 Confirm New Password
+            </label>
+
             <input
               type="password"
               placeholder="Password दोबारा डालें"
               value={confirmPassword}
               onChange={(e) =>
-                setConfirmPassword(e.target.value)
+                setConfirmPassword(
+                  e.target.value
+                )
               }
             />
 
@@ -662,15 +1058,22 @@ function ForgotPassword({ onBack }) {
           </form>
 
           <button
+            type="button"
             className="auth-close-btn"
-            onClick={() => setStep(1)}
+            onClick={() =>
+              setStep(1)
+            }
           >
             ← Mobile Number बदलें
           </button>
         </>
       )}
 
-      <button className="auth-close-btn" onClick={onBack}>
+      <button
+        type="button"
+        className="auth-close-btn"
+        onClick={onBack}
+      >
         ← Login पर वापस जाएँ
       </button>
     </AuthShell>
@@ -681,41 +1084,68 @@ function ForgotPassword({ onBack }) {
    ADMIN LOGIN
 ====================================================== */
 
-function AdminLogin({ onSuccess, onBack }) {
-  const [email, setEmail] = useState(ADMIN_EMAIL);
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+function AdminLogin({
+  onSuccess,
+  onBack,
+}) {
+  const [email, setEmail] =
+    useState(ADMIN_EMAIL);
 
-  const login = async (e) => {
-    e.preventDefault();
+  const [password, setPassword] =
+    useState("");
 
-    if (!email.trim() || !password) {
-      alert("Email और Password दोनों डालें।");
+  const [loading, setLoading] =
+    useState(false);
+
+  const handleLogin = async (
+    event
+  ) => {
+    event.preventDefault();
+
+    if (
+      !email.trim() ||
+      !password
+    ) {
+      alert(
+        "Email और Password दोनों डालें।"
+      );
       return;
     }
 
     try {
       setLoading(true);
 
-      const result = await signInWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-      );
+      const result =
+        await signInWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
 
       if (
         result.user.email?.toLowerCase() !==
         ADMIN_EMAIL.toLowerCase()
       ) {
         await signOut(auth);
-        alert("❌ यह Admin account नहीं है।");
+
+        alert(
+          "❌ यह Admin account नहीं है।"
+        );
+
         return;
       }
 
       onSuccess?.(result.user);
     } catch (error) {
-      console.error(error);
-      alert("❌ Admin Login failed:\n" + error.message);
+      console.error(
+        "Admin Login:",
+        error
+      );
+
+      alert(
+        "❌ Admin Login failed:\n" +
+          error.message
+      );
     } finally {
       setLoading(false);
     }
@@ -723,39 +1153,468 @@ function AdminLogin({ onSuccess, onBack }) {
 
   return (
     <AuthShell>
-      <div className="auth-icon">👨‍💼</div>
-      <h1>Admin Login</h1>
-      <p>Admin के लिए Email + Password इस्तेमाल करें</p>
+      <div className="auth-icon">
+        👨‍💼
+      </div>
 
-      <form onSubmit={login}>
-        <label>📧 Admin Email</label>
+      <h1>
+        Admin Login
+      </h1>
+
+      <p>
+        Admin के लिए Email + Password इस्तेमाल करें
+      </p>
+
+      <form
+        onSubmit={handleLogin}
+      >
+        <label>
+          📧 Admin Email
+        </label>
+
         <input
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) =>
+            setEmail(
+              e.target.value
+            )
+          }
         />
 
-        <label>🔐 Password</label>
+        <label>
+          🔐 Password
+        </label>
+
         <input
           type="password"
           placeholder="Admin Password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) =>
+            setPassword(
+              e.target.value
+            )
+          }
         />
 
         <button
-          className="auth-primary-btn"
-          disabled={loading}
           type="submit"
+          disabled={loading}
+          className="auth-primary-btn"
         >
-          {loading ? "⏳ Login..." : "👨‍💼 Admin Login"}
+          {loading
+            ? "⏳ Login..."
+            : "👨‍💼 Admin Login"}
         </button>
       </form>
 
-      <button className="auth-close-btn" onClick={onBack}>
+      <button
+        type="button"
+        className="auth-close-btn"
+        onClick={onBack}
+      >
         ← User Login
       </button>
     </AuthShell>
+  );
+}
+
+/* ======================================================
+   ADMIN PASSWORD RESET
+   IMPORTANT:
+   अलग PasswordResetAdmin.jsx की जरूरत नहीं है.
+====================================================== */
+
+function PasswordResetAdmin() {
+  const [requests, setRequests] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [generating, setGenerating] =
+    useState("");
+
+  const [message, setMessage] =
+    useState("");
+
+  const loadRequests =
+    async () => {
+      try {
+        setLoading(true);
+
+        const currentUser =
+          auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error(
+            "Admin session नहीं मिला।"
+          );
+        }
+
+        const token =
+          await currentUser.getIdToken();
+
+        const response =
+          await fetch(
+            "/api/password-reset?action=list",
+            {
+              method: "GET",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Requests load नहीं हुईं"
+          );
+        }
+
+        setRequests(
+          Array.isArray(
+            data.requests
+          )
+            ? data.requests
+            : []
+        );
+      } catch (error) {
+        console.error(
+          "Load reset requests:",
+          error
+        );
+
+        setMessage(
+          "❌ " +
+            error.message
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const generateOtp =
+    async (request) => {
+      try {
+        setGenerating(
+          request.requestId ||
+            request.id ||
+            request.mobile ||
+            ""
+        );
+
+        setMessage("");
+
+        const currentUser =
+          auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error(
+            "Admin session नहीं मिला।"
+          );
+        }
+
+        const token =
+          await currentUser.getIdToken();
+
+        const response =
+          await fetch(
+            "/api/password-reset",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Authorization:
+                  `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                action: "generate",
+
+                requestId:
+                  request.requestId ||
+                  request.id ||
+                  "",
+
+                mobile:
+                  request.mobile ||
+                  request.identifier ||
+                  "",
+
+                identifier:
+                  request.identifier ||
+                  request.mobile ||
+                  "",
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "OTP generate नहीं हुआ"
+          );
+        }
+
+        setMessage(
+          data.message ||
+            "✅ OTP Generate हो गया और WhatsApp भेजने की प्रक्रिया शुरू हो गई।"
+        );
+
+        await loadRequests();
+      } catch (error) {
+        console.error(
+          "Generate OTP:",
+          error
+        );
+
+        setMessage(
+          "❌ " +
+            error.message
+        );
+      } finally {
+        setGenerating("");
+      }
+    };
+
+  return (
+    <div
+      style={{
+        padding: "20px",
+        maxWidth: "1100px",
+        margin: "0 auto",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent:
+            "space-between",
+          alignItems: "center",
+          gap: "12px",
+          flexWrap: "wrap",
+          marginBottom: "20px",
+        }}
+      >
+        <div>
+          <h1>
+            🔑 Password Reset Requests
+          </h1>
+
+          <p>
+            Users के Mobile Password Reset
+            Requests यहाँ दिखाई देंगी।
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={loadRequests}
+          disabled={loading}
+          style={{
+            padding: "10px 16px",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontWeight: "700",
+          }}
+        >
+          {loading
+            ? "⏳ Loading..."
+            : "🔄 Refresh"}
+        </button>
+      </div>
+
+      {message && (
+        <div
+          style={{
+            padding: "12px",
+            marginBottom: "15px",
+            background: "#f3f4f6",
+            borderRadius: "8px",
+            fontWeight: "600",
+          }}
+        >
+          {message}
+        </div>
+      )}
+
+      {requests.length === 0 ? (
+        <div
+          style={{
+            padding: "30px",
+            textAlign: "center",
+            background: "#f8fafc",
+            borderRadius: "12px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "40px",
+            }}
+          >
+            📭
+          </div>
+
+          <h3>
+            अभी कोई Password Reset Request नहीं है
+          </h3>
+
+          <p>
+            User Forgot Password से request
+            भेजेगा तो यहाँ दिखाई देगी।
+          </p>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gap: "15px",
+          }}
+        >
+          {requests.map(
+            (request, index) => {
+              const key =
+                request.requestId ||
+                request.id ||
+                request.mobile ||
+                index;
+
+              const mobile =
+                request.mobile ||
+                request.identifier ||
+                "—";
+
+              const status =
+                request.status ||
+                "Pending";
+
+              const isGenerating =
+                generating === key;
+
+              return (
+                <div
+                  key={key}
+                  style={{
+                    background: "#fff",
+                    border:
+                      "1px solid #e5e7eb",
+                    borderRadius: "12px",
+                    padding: "18px",
+                    boxShadow:
+                      "0 3px 12px rgba(0,0,0,.06)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent:
+                        "space-between",
+                      gap: "15px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <h3>
+                        📱 {mobile}
+                      </h3>
+
+                      <p>
+                        <strong>
+                          Status:
+                        </strong>{" "}
+                        {status}
+                      </p>
+
+                      {request.name && (
+                        <p>
+                          <strong>
+                            Name:
+                          </strong>{" "}
+                          {request.name}
+                        </p>
+                      )}
+
+                      {request.createdAt && (
+                        <p>
+                          <strong>
+                            Request:
+                          </strong>{" "}
+                          {String(
+                            request.createdAt
+                          )}
+                        </p>
+                      )}
+
+                      {request.otpCreatedAt && (
+                        <p>
+                          <strong>
+                            OTP:
+                          </strong>{" "}
+                          {String(
+                            request.otpCreatedAt
+                          )}
+                        </p>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems:
+                          "center",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          generateOtp(
+                            request
+                          )
+                        }
+                        disabled={
+                          isGenerating
+                        }
+                        style={{
+                          padding:
+                            "12px 18px",
+                          border: "none",
+                          borderRadius:
+                            "8px",
+                          cursor:
+                            isGenerating
+                              ? "wait"
+                              : "pointer",
+                          fontWeight:
+                            "800",
+                        }}
+                      >
+                        {isGenerating
+                          ? "⏳ Generating..."
+                          : "📲 Generate OTP + WhatsApp"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -775,10 +1634,18 @@ function HomePage({
     <div className="app-container">
       <header className="top-header">
         <div className="brand">
-          <div className="brand-logo">📚</div>
+          <div className="brand-logo">
+            📚
+          </div>
+
           <div>
-            <h1>{APP_NAME}</h1>
-            <small>Competitive Exam Preparation</small>
+            <h1>
+              {APP_NAME}
+            </h1>
+
+            <small>
+              Competitive Exam Preparation
+            </small>
           </div>
         </div>
 
@@ -786,14 +1653,34 @@ function HomePage({
           {user ? (
             <>
               <span className="welcome-user">
-                👤 {userData?.name || user.displayName || "User"}
+                👤{" "}
+                {userData?.name ||
+                  user.displayName ||
+                  "User"}
               </span>
-              <button onClick={onLogout}>Logout</button>
+
+              <button
+                type="button"
+                onClick={onLogout}
+              >
+                Logout
+              </button>
             </>
           ) : (
             <>
-              <button onClick={onLogin}>Login</button>
-              <button onClick={onRegister}>Create Account</button>
+              <button
+                type="button"
+                onClick={onLogin}
+              >
+                Login
+              </button>
+
+              <button
+                type="button"
+                onClick={onRegister}
+              >
+                Create Account
+              </button>
             </>
           )}
         </div>
@@ -802,24 +1689,38 @@ function HomePage({
       <main className="home-content">
         <section className="hero-section">
           <div>
-            <span className="hero-badge">🎯 EXAM PREPARATION</span>
+            <span className="hero-badge">
+              🎯 EXAM PREPARATION
+            </span>
 
             <h2>
-              Welcome to <strong>{APP_NAME}</strong>
+              Welcome to{" "}
+              <strong>
+                {APP_NAME}
+              </strong>
             </h2>
 
             <p>
-              UPSC, UPPCS, UP PET, SSC, Railway, Banking,
-              Police और अन्य प्रतियोगी परीक्षाओं की तैयारी
-              एक ही जगह करें।
+              UPSC, UPPCS, UP PET,
+              SSC, Railway, Banking,
+              Police और अन्य
+              प्रतियोगी परीक्षाओं की
+              तैयारी एक ही जगह करें।
             </p>
 
             {!user && (
               <div className="hero-buttons">
-                <button onClick={onRegister}>
+                <button
+                  type="button"
+                  onClick={onRegister}
+                >
                   🚀 Create Account
                 </button>
-                <button onClick={onLogin}>
+
+                <button
+                  type="button"
+                  onClick={onLogin}
+                >
                   🔐 Login
                 </button>
               </div>
@@ -828,6 +1729,7 @@ function HomePage({
             {user && (
               <p className="logged-message">
                 ✅ आप Login हैं
+
                 {userData?.preparation
                   ? ` • तैयारी: ${userData.preparation}`
                   : ""}
@@ -837,47 +1739,103 @@ function HomePage({
         </section>
 
         <section className="section-block">
-          <h2>📚 Exam Preparation</h2>
+          <h2>
+            📚 Exam Preparation
+          </h2>
 
           <div className="exam-grid">
-            {exams.map((exam) => (
-              <button
-                key={exam.id}
-                className="exam-card"
-                onClick={() => onNavigate("tests")}
-                style={{ background: exam.color }}
-              >
-                <span>{exam.icon}</span>
-                <strong>{exam.name}</strong>
-                <small>Practice & Test</small>
-              </button>
-            ))}
+            {exams.map(
+              (exam) => (
+                <button
+                  key={exam.id}
+                  type="button"
+                  className="exam-card"
+                  onClick={() =>
+                    onNavigate(
+                      "tests"
+                    )
+                  }
+                  style={{
+                    background:
+                      exam.color,
+                  }}
+                >
+                  <span>
+                    {exam.icon}
+                  </span>
+
+                  <strong>
+                    {exam.name}
+                  </strong>
+
+                  <small>
+                    Practice & Test
+                  </small>
+                </button>
+              )
+            )}
           </div>
         </section>
 
         <section className="feature-grid">
-          <button onClick={() => onNavigate("mcq")}>
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate("mcq")
+            }
+          >
             <span>📝</span>
-            <strong>MCQ Practice</strong>
-            <small>Important Questions</small>
+            <strong>
+              MCQ Practice
+            </strong>
+            <small>
+              Important Questions
+            </small>
           </button>
 
-          <button onClick={() => onNavigate("tests")}>
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate("tests")
+            }
+          >
             <span>🎯</span>
-            <strong>Test Series</strong>
-            <small>Mock Tests</small>
+            <strong>
+              Test Series
+            </strong>
+            <small>
+              Mock Tests
+            </small>
           </button>
 
-          <button onClick={() => onNavigate("current")}>
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate("current")
+            }
+          >
             <span>📰</span>
-            <strong>Current Affairs</strong>
-            <small>Daily Updates</small>
+            <strong>
+              Current Affairs
+            </strong>
+            <small>
+              Daily Updates
+            </small>
           </button>
 
-          <button onClick={() => onNavigate("ai")}>
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate("ai")
+            }
+          >
             <span>🤖</span>
-            <strong>AI MCQ Generator</strong>
-            <small>Generate Questions</small>
+            <strong>
+              AI MCQ Generator
+            </strong>
+            <small>
+              Generate Questions
+            </small>
           </button>
         </section>
       </main>
@@ -886,40 +1844,100 @@ function HomePage({
 }
 
 /* ======================================================
-   SIMPLE CONTENT PAGES
+   SIMPLE MCQ PAGE
 ====================================================== */
 
-function MCQPage({ onBack }) {
+function MCQPage({
+  onBack,
+}) {
   return (
     <div className="page-container">
-      <button onClick={onBack} className="back-btn">← Home</button>
-      <h1>📝 MCQ Practice</h1>
-      <p>यहाँ आपके MCQ / Test modules जोड़े जा सकते हैं।</p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="back-btn"
+      >
+        ← Home
+      </button>
+
+      <h1>
+        📝 MCQ Practice
+      </h1>
+
+      <p>
+        आपके MCQ / Test modules
+        यहाँ उपलब्ध होंगे।
+      </p>
     </div>
   );
 }
 
-function TestsPage({ onBack }) {
+/* ======================================================
+   TESTS PAGE
+====================================================== */
+
+function TestsPage({
+  onBack,
+}) {
   return (
     <div className="page-container">
-      <button onClick={onBack} className="back-btn">← Home</button>
-      <h1>🎯 Test Series</h1>
-      <p>आपकी Test Series यहाँ दिखाई जाएगी।</p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="back-btn"
+      >
+        ← Home
+      </button>
+
+      <h1>
+        🎯 Test Series
+      </h1>
+
+      <p>
+        आपकी Test Series यहाँ
+        दिखाई जाएगी।
+      </p>
     </div>
   );
 }
 
-function ResourcesPage({ onBack }) {
+/* ======================================================
+   RESOURCES PAGE
+====================================================== */
+
+function ResourcesPage({
+  onBack,
+}) {
   return (
     <div className="page-container">
-      <button onClick={onBack} className="back-btn">← Home</button>
-      <h1>📚 Study Resources</h1>
+      <button
+        type="button"
+        onClick={onBack}
+        className="back-btn"
+      >
+        ← Home
+      </button>
+
+      <h1>
+        📚 Study Resources
+      </h1>
 
       <div className="resource-list">
-        <div>📖 NCERT Books</div>
-        <div>📝 Previous Year Questions</div>
-        <div>🎯 Practice Tests</div>
-        <div>📰 Current Affairs</div>
+        <div>
+          📖 NCERT Books
+        </div>
+
+        <div>
+          📝 Previous Year Questions
+        </div>
+
+        <div>
+          🎯 Practice Tests
+        </div>
+
+        <div>
+          📰 Current Affairs
+        </div>
       </div>
     </div>
   );
@@ -930,243 +1948,585 @@ function ResourcesPage({ onBack }) {
 ====================================================== */
 
 export default function App() {
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [userData, setUserData] = useState(null);
+  const [
+    firebaseUser,
+    setFirebaseUser,
+  ] = useState(null);
 
-  const [screen, setScreen] = useState("home");
+  const [
+    userData,
+    setUserData,
+  ] = useState(null);
 
-  const [authPage, setAuthPage] = useState(null);
+  const [
+    screen,
+    setScreen,
+  ] = useState("home");
 
-  const [loading, setLoading] = useState(true);
+  const [
+    authPage,
+    setAuthPage,
+  ] = useState(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  /* ====================================================
+     AUTH STATE
+  ==================================================== */
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        async (user) => {
+          setFirebaseUser(user);
 
-      if (user) {
-        const data = await getUserData(user.uid);
-        setUserData(data);
+          if (user) {
+            const data =
+              await getUserData(
+                user.uid
+              );
 
-        if (
-          user.email?.toLowerCase() ===
-          ADMIN_EMAIL.toLowerCase()
-        ) {
-          setScreen("admin");
-          setAuthPage(null);
-        }
-      } else {
-        setUserData(null);
-      }
+            setUserData(data);
 
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const refreshUserData = async (user) => {
-    if (!user?.uid) return;
-
-    const data = await getUserData(user.uid);
-    setUserData(data);
-  };
-
-  const handleUserLogin = async (user) => {
-    await refreshUserData(user);
-    setAuthPage(null);
-    setScreen("home");
-  };
-
-  const handleRegisterSuccess = (user) => {
-    setFirebaseUser(user);
-    setAuthPage("exam-selection");
-  };
-
-  const handleExamComplete = async (exam) => {
-    if (firebaseUser) {
-      await refreshUserData(firebaseUser);
-    }
-
-    setAuthPage(null);
-    setScreen("home");
-  };
-
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      setFirebaseUser(null);
-      setUserData(null);
-      setScreen("home");
-      setAuthPage(null);
-    } catch (error) {
-      alert("Logout Error: " + error.message);
-    }
-  };
-
-  const isAdmin =
-    firebaseUser?.email?.toLowerCase() ===
-    ADMIN_EMAIL.toLowerCase();
-
-  const appPage = useMemo(() => {
-    if (screen === "current") {
-      return (
-        <div className="page-container">
-          <CurrentAffairs />
-        </div>
-      );
-    }
-
-    if (screen === "ai") {
-      return (
-        <div className="page-container">
-          <AIMCQGenerator />
-        </div>
-      );
-    }
-
-    if (screen === "admin") {
-      if (!isAdmin) {
-        return (
-          <AdminLogin
-            onSuccess={(user) => {
-              setFirebaseUser(user);
+            if (
+              user.email?.toLowerCase() ===
+              ADMIN_EMAIL.toLowerCase()
+            ) {
               setScreen("admin");
               setAuthPage(null);
-            }}
-            onBack={() => setScreen("home")}
-          />
+            }
+          } else {
+            setUserData(null);
+          }
+
+          setLoading(false);
+        }
+      );
+
+    return () =>
+      unsubscribe();
+  }, []);
+
+  /* ====================================================
+     REFRESH USER
+  ==================================================== */
+
+  const refreshUserData =
+    async (user) => {
+      if (!user?.uid) {
+        return;
+      }
+
+      const data =
+        await getUserData(
+          user.uid
+        );
+
+      setUserData(data);
+    };
+
+  /* ====================================================
+     USER LOGIN SUCCESS
+  ==================================================== */
+
+  const handleUserLogin =
+    async (user) => {
+      await refreshUserData(
+        user
+      );
+
+      setAuthPage(null);
+      setScreen("home");
+    };
+
+  /* ====================================================
+     REGISTER SUCCESS
+  ==================================================== */
+
+  const handleRegisterSuccess =
+    (user) => {
+      setFirebaseUser(user);
+
+      setAuthPage(
+        "exam-selection"
+      );
+    };
+
+  /* ====================================================
+     EXAM COMPLETE
+  ==================================================== */
+
+  const handleExamComplete =
+    async () => {
+      if (firebaseUser) {
+        await refreshUserData(
+          firebaseUser
         );
       }
 
-      return (
-        <div>
-          <div className="admin-topbar">
-            <strong>👨‍💼 {APP_NAME} Admin Panel</strong>
+      setAuthPage(null);
+      setScreen("home");
+    };
 
-            <div>
-              <button onClick={() => setScreen("password-reset-admin")}>
-                🔑 Password Reset
-              </button>
+  /* ====================================================
+     LOGOUT
+  ==================================================== */
 
-              <button onClick={() => setScreen("home")}>
-                🏠 Website
-              </button>
+  const logout =
+    async () => {
+      try {
+        await signOut(auth);
 
-              <button onClick={logout}>Logout</button>
-            </div>
-          </div>
+        setFirebaseUser(null);
+        setUserData(null);
+        setScreen("home");
+        setAuthPage(null);
+      } catch (error) {
+        alert(
+          "Logout Error: " +
+            error.message
+        );
+      }
+    };
 
-          <AdminPanel />
-        </div>
-      );
-    }
+  /* ====================================================
+     ADMIN CHECK
+  ==================================================== */
 
-    if (screen === "password-reset-admin") {
-      if (!isAdmin) {
+  const isAdmin =
+    firebaseUser?.email
+      ?.toLowerCase() ===
+    ADMIN_EMAIL.toLowerCase();
+
+  /* ====================================================
+     APP PAGE
+  ==================================================== */
+
+  const appPage =
+    useMemo(() => {
+      /* ================================================
+         CURRENT AFFAIRS
+      ================================================ */
+
+      if (
+        screen === "current"
+      ) {
         return (
-          <AdminLogin
-            onSuccess={(user) => {
-              setFirebaseUser(user);
-              setScreen("password-reset-admin");
-              setAuthPage(null);
-            }}
-            onBack={() => setScreen("home")}
+          <div className="page-container">
+            <CurrentAffairs />
+          </div>
+        );
+      }
+
+      /* ================================================
+         AI MCQ
+      ================================================ */
+
+      if (
+        screen === "ai"
+      ) {
+        return (
+          <div className="page-container">
+            <AIMCQGenerator />
+          </div>
+        );
+      }
+
+      /* ================================================
+         ADMIN PANEL
+      ================================================ */
+
+      if (
+        screen === "admin"
+      ) {
+        if (!isAdmin) {
+          return (
+            <AdminLogin
+              onSuccess={(user) => {
+                setFirebaseUser(
+                  user
+                );
+
+                setScreen(
+                  "admin"
+                );
+
+                setAuthPage(null);
+              }}
+              onBack={() =>
+                setScreen(
+                  "home"
+                )
+              }
+            />
+          );
+        }
+
+        return (
+          <div>
+            <div className="admin-topbar">
+              <strong>
+                👨‍💼 {APP_NAME} Admin Panel
+              </strong>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScreen(
+                      "password-reset-admin"
+                    )
+                  }
+                >
+                  🔑 Password Reset
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScreen(
+                      "home"
+                    )
+                  }
+                >
+                  🏠 Website
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    logout
+                  }
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+
+            <AdminPanel />
+          </div>
+        );
+      }
+
+      /* ================================================
+         PASSWORD RESET ADMIN
+      ================================================ */
+
+      if (
+        screen ===
+        "password-reset-admin"
+      ) {
+        if (!isAdmin) {
+          return (
+            <AdminLogin
+              onSuccess={(user) => {
+                setFirebaseUser(
+                  user
+                );
+
+                setScreen(
+                  "password-reset-admin"
+                );
+
+                setAuthPage(null);
+              }}
+              onBack={() =>
+                setScreen(
+                  "home"
+                )
+              }
+            />
+          );
+        }
+
+        return (
+          <div>
+            <div className="admin-topbar">
+              <strong>
+                🔑 {APP_NAME} Password Reset
+              </strong>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScreen(
+                      "admin"
+                    )
+                  }
+                >
+                  ← Admin Panel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScreen(
+                      "home"
+                    )
+                  }
+                >
+                  🏠 Website
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    logout
+                  }
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+
+            <PasswordResetAdmin />
+          </div>
+        );
+      }
+
+      /* ================================================
+         MCQ
+      ================================================ */
+
+      if (
+        screen === "mcq"
+      ) {
+        return (
+          <MCQPage
+            onBack={() =>
+              setScreen(
+                "home"
+              )
+            }
           />
         );
       }
 
+      /* ================================================
+         TESTS
+      ================================================ */
+
+      if (
+        screen === "tests"
+      ) {
+        return (
+          <TestsPage
+            onBack={() =>
+              setScreen(
+                "home"
+              )
+            }
+          />
+        );
+      }
+
+      /* ================================================
+         RESOURCES
+      ================================================ */
+
+      if (
+        screen === "resources"
+      ) {
+        return (
+          <ResourcesPage
+            onBack={() =>
+              setScreen(
+                "home"
+              )
+            }
+          />
+        );
+      }
+
+      /* ================================================
+         HOME
+      ================================================ */
+
       return (
-        <div className="page-container">
-          <button
-            className="back-btn"
-            onClick={() => setScreen("admin")}
-          >
-            ← Admin Panel
-          </button>
-
-          <PasswordResetAdmin />
-        </div>
+        <HomePage
+          user={
+            firebaseUser
+          }
+          userData={
+            userData
+          }
+          onLogin={() =>
+            setAuthPage(
+              "login"
+            )
+          }
+          onRegister={() =>
+            setAuthPage(
+              "register"
+            )
+          }
+          onLogout={
+            logout
+          }
+          onNavigate={
+            setScreen
+          }
+        />
       );
-    }
+    }, [
+      screen,
+      firebaseUser,
+      userData,
+      isAdmin,
+    ]);
 
-    if (screen === "mcq") {
-      return <MCQPage onBack={() => setScreen("home")} />;
-    }
-
-    if (screen === "tests") {
-      return <TestsPage onBack={() => setScreen("home")} />;
-    }
-
-    if (screen === "resources") {
-      return <ResourcesPage onBack={() => setScreen("home")} />;
-    }
-
-    return (
-      <HomePage
-        user={firebaseUser}
-        userData={userData}
-        onLogin={() => setAuthPage("login")}
-        onRegister={() => setAuthPage("register")}
-        onLogout={logout}
-        onNavigate={setScreen}
-      />
-    );
-  }, [screen, firebaseUser, userData, isAdmin]);
+  /* ====================================================
+     LOADING
+  ==================================================== */
 
   if (loading) {
     return (
       <div className="app-loading">
-        <div className="loading-logo">📚</div>
-        <h2>{APP_NAME}</h2>
-        <p>Loading...</p>
+        <div className="loading-logo">
+          📚
+        </div>
+
+        <h2>
+          {APP_NAME}
+        </h2>
+
+        <p>
+          Loading...
+        </p>
       </div>
     );
   }
+
+  /* ====================================================
+     RETURN
+  ==================================================== */
 
   return (
     <>
       {appPage}
 
-      {authPage === "login" && (
+      {/* ================================================
+          USER LOGIN
+      ================================================ */}
+
+      {authPage ===
+        "login" && (
         <LoginPage
-          onSuccess={handleUserLogin}
-          onRegister={() => setAuthPage("register")}
-          onForgot={() => setAuthPage("forgot")}
-          onAdmin={() => setAuthPage("admin")}
-          onClose={() => setAuthPage(null)}
+          onSuccess={
+            handleUserLogin
+          }
+          onRegister={() =>
+            setAuthPage(
+              "register"
+            )
+          }
+          onForgot={() =>
+            setAuthPage(
+              "forgot"
+            )
+          }
+          onAdmin={() =>
+            setAuthPage(
+              "admin"
+            )
+          }
+          onClose={() =>
+            setAuthPage(
+              null
+            )
+          }
         />
       )}
 
-      {authPage === "register" && (
+      {/* ================================================
+          REGISTER
+      ================================================ */}
+
+      {authPage ===
+        "register" && (
         <RegisterPage
-          onSuccess={handleRegisterSuccess}
-          onLogin={() => setAuthPage("login")}
-          onClose={() => setAuthPage(null)}
+          onSuccess={
+            handleRegisterSuccess
+          }
+          onLogin={() =>
+            setAuthPage(
+              "login"
+            )
+          }
+          onClose={() =>
+            setAuthPage(
+              null
+            )
+          }
         />
       )}
 
-      {authPage === "exam-selection" && (
+      {/* ================================================
+          EXAM SELECTION
+      ================================================ */}
+
+      {authPage ===
+        "exam-selection" && (
         <ExamSelectionPage
-          user={firebaseUser}
-          onComplete={handleExamComplete}
-          onClose={() => setAuthPage(null)}
+          user={
+            firebaseUser
+          }
+          onComplete={
+            handleExamComplete
+          }
+          onClose={() =>
+            setAuthPage(
+              null
+            )
+          }
         />
       )}
 
-      {authPage === "forgot" && (
+      {/* ================================================
+          FORGOT PASSWORD
+      ================================================ */}
+
+      {authPage ===
+        "forgot" && (
         <ForgotPassword
-          onBack={() => setAuthPage("login")}
+          onBack={() =>
+            setAuthPage(
+              "login"
+            )
+          }
         />
       )}
 
-      {authPage === "admin" && (
+      {/* ================================================
+          ADMIN LOGIN
+      ================================================ */}
+
+      {authPage ===
+        "admin" && (
         <AdminLogin
           onSuccess={(user) => {
-            setFirebaseUser(user);
-            setAuthPage(null);
-            setScreen("admin");
+            setFirebaseUser(
+              user
+            );
+
+            setAuthPage(
+              null
+            );
+
+            setScreen(
+              "admin"
+            );
           }}
-          onBack={() => setAuthPage("login")}
+          onBack={() =>
+            setAuthPage(
+              "login"
+            )
+          }
         />
       )}
     </>
