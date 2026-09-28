@@ -144,16 +144,19 @@ const exams = [
 function normalizeMobile(value) {
   return String(value || "")
     .replace(/\D/g, "")
+    .replace(/^91/, "")
     .slice(-10);
 }
 
 /*
-  Firebase Email/Password Auth internally uses an email.
-  User को केवल Mobile Number दिखाई देगा.
+  User को केवल Mobile Number दिखाई देगा।
+  Firebase Authentication के लिए internal email बनेगा।
 */
 
 function mobileToAuthEmail(mobile) {
-  return `${normalizeMobile(mobile)}@studywithpower.app`;
+  return `${normalizeMobile(
+    mobile
+  )}@mobile.examtest.local`;
 }
 
 /* ======================================================
@@ -206,13 +209,19 @@ function LoginPage({
   onRegister,
   onForgot,
   onAdmin,
-  onClose,
 }) {
-  const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [mobile, setMobile] =
+    useState("");
 
-  const handleLogin = async (event) => {
+  const [password, setPassword] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const handleLogin = async (
+    event
+  ) => {
     event.preventDefault();
 
     const cleanMobile =
@@ -236,9 +245,15 @@ function LoginPage({
       const result =
         await signInWithEmailAndPassword(
           auth,
-          mobileToAuthEmail(cleanMobile),
+          mobileToAuthEmail(
+            cleanMobile
+          ),
           password
         );
+
+      /*
+        Admin को User Login से रोकना
+      */
 
       if (
         result.user.email &&
@@ -289,14 +304,17 @@ function LoginPage({
         📱
       </div>
 
-      <h1>User Login</h1>
+      <h1>
+        {APP_NAME} Login
+      </h1>
 
       <p>
-        {APP_NAME} में Mobile Number और
-        Password से Login करें
+        Mobile Number और Password से Login करें
       </p>
 
-      <form onSubmit={handleLogin}>
+      <form
+        onSubmit={handleLogin}
+      >
         <label>
           📱 Mobile Number
         </label>
@@ -325,7 +343,9 @@ function LoginPage({
           placeholder="अपना Password डालें"
           value={password}
           onChange={(e) =>
-            setPassword(e.target.value)
+            setPassword(
+              e.target.value
+            )
           }
         />
 
@@ -366,14 +386,6 @@ function LoginPage({
       >
         👨‍💼 Admin Login
       </button>
-
-      <button
-        type="button"
-        className="auth-close-btn"
-        onClick={onClose}
-      >
-        ← Website पर वापस जाएँ
-      </button>
     </AuthShell>
   );
 }
@@ -385,7 +397,6 @@ function LoginPage({
 function RegisterPage({
   onSuccess,
   onLogin,
-  onClose,
 }) {
   const [name, setName] =
     useState("");
@@ -441,8 +452,14 @@ function RegisterPage({
     try {
       setLoading(true);
 
+      /*
+        Mobile → Internal Firebase Email
+      */
+
       const authEmail =
-        mobileToAuthEmail(cleanMobile);
+        mobileToAuthEmail(
+          cleanMobile
+        );
 
       const result =
         await createUserWithEmailAndPassword(
@@ -462,13 +479,31 @@ function RegisterPage({
       const createdAt =
         new Date().toISOString();
 
+      /*
+        User Profile
+      */
+
       const userData = {
         uid: result.user.uid,
-        name: name.trim(),
-        mobile: cleanMobile,
+
+        name:
+          name.trim(),
+
+        mobile:
+          cleanMobile,
+
         authEmail,
-        preparation: "",
+
+        preparation:
+          "",
+
         createdAt,
+
+        role:
+          "user",
+
+        status:
+          "active",
       };
 
       await set(
@@ -479,17 +514,34 @@ function RegisterPage({
         userData
       );
 
+      /*
+        Mobile Index
+      */
+
       await set(
         ref(
           db,
           `mobileUsers/${cleanMobile}`
         ),
         {
-          uid: result.user.uid,
-          name: name.trim(),
-          mobile: cleanMobile,
+          uid:
+            result.user.uid,
+
+          name:
+            name.trim(),
+
+          mobile:
+            cleanMobile,
+
           authEmail,
+
           createdAt,
+
+          role:
+            "user",
+
+          status:
+            "active",
         }
       );
 
@@ -497,7 +549,9 @@ function RegisterPage({
         "✅ Account सफलतापूर्वक बन गया।"
       );
 
-      onSuccess?.(result.user);
+      onSuccess?.(
+        result.user
+      );
     } catch (error) {
       console.error(
         "Registration Error:",
@@ -535,7 +589,9 @@ function RegisterPage({
         📝
       </div>
 
-      <h1>Create Account</h1>
+      <h1>
+        Create Account
+      </h1>
 
       <p>
         {APP_NAME} पर अपना account बनाएं
@@ -545,15 +601,17 @@ function RegisterPage({
         onSubmit={handleRegister}
       >
         <label>
-          👤 पूरा नाम
+          👤 आपका नाम
         </label>
 
         <input
           type="text"
-          placeholder="अपना नाम दर्ज करें"
+          placeholder="अपना पूरा नाम"
           value={name}
           onChange={(e) =>
-            setName(e.target.value)
+            setName(
+              e.target.value
+            )
           }
         />
 
@@ -585,7 +643,9 @@ function RegisterPage({
           placeholder="कम से कम 6 characters"
           value={password}
           onChange={(e) =>
-            setPassword(e.target.value)
+            setPassword(
+              e.target.value
+            )
           }
         />
 
@@ -598,7 +658,9 @@ function RegisterPage({
           placeholder="Password दोबारा डालें"
           value={confirm}
           onChange={(e) =>
-            setConfirm(e.target.value)
+            setConfirm(
+              e.target.value
+            )
           }
         />
 
@@ -623,14 +685,6 @@ function RegisterPage({
           Login करें
         </button>
       </div>
-
-      <button
-        type="button"
-        className="auth-close-btn"
-        onClick={onClose}
-      >
-        ← Website पर वापस जाएँ
-      </button>
     </AuthShell>
   );
 }
@@ -642,7 +696,6 @@ function RegisterPage({
 function ExamSelectionPage({
   user,
   onComplete,
-  onClose,
 }) {
   const [selected, setSelected] =
     useState("");
@@ -676,7 +729,9 @@ function ExamSelectionPage({
         selected
       );
 
-      onComplete?.(selected);
+      onComplete?.(
+        selected
+      );
     } catch (error) {
       console.error(
         "Exam Selection Error:",
@@ -699,70 +754,67 @@ function ExamSelectionPage({
       </div>
 
       <h1>
-        आप किस परीक्षा की तैयारी कर रहे हैं?
+        परीक्षा चुनें
       </h1>
 
       <p>
-        अपनी परीक्षा चुनें
+        आप किस परीक्षा की तैयारी कर रहे हैं?
       </p>
 
       <div className="exam-selection-grid">
-        {exams.map((exam) => {
-          const active =
-            selected === exam.name;
+        {exams.map(
+          (exam) => {
+            const active =
+              selected ===
+              exam.name;
 
-          return (
-            <button
-              key={exam.id}
-              type="button"
-              className={
-                `exam-select-card ` +
-                (active
-                  ? "active"
-                  : "")
-              }
-              onClick={() =>
-                setSelected(
-                  exam.name
-                )
-              }
-              style={{
-                background: active
-                  ? "#eff6ff"
-                  : exam.color,
-              }}
-            >
-              <span>
-                {exam.icon}
-              </span>
+            return (
+              <button
+                key={exam.id}
+                type="button"
+                className={
+                  `exam-select-card ` +
+                  (active
+                    ? "active"
+                    : "")
+                }
+                onClick={() =>
+                  setSelected(
+                    exam.name
+                  )
+                }
+                style={{
+                  background:
+                    active
+                      ? "#eff6ff"
+                      : exam.color,
+                }}
+              >
+                <span>
+                  {exam.icon}
+                </span>
 
-              <strong>
-                {exam.name}
-              </strong>
-            </button>
-          );
-        })}
+                <strong>
+                  {exam.name}
+                </strong>
+              </button>
+            );
+          }
+        )}
       </div>
 
       <button
         type="button"
         className="auth-primary-btn"
         disabled={
-          loading || !selected
+          loading ||
+          !selected
         }
         onClick={saveExam}
       >
         {loading
           ? "⏳ Save हो रहा है..."
           : "Continue →"}
-      </button>
-
-      <button
-        type="button"
-        className="auth-close-btn"
-        onClick={onClose}
-      >
-        ← Website पर वापस जाएँ
       </button>
     </AuthShell>
   );
@@ -793,6 +845,10 @@ function ForgotPassword({
   const [loading, setLoading] =
     useState(false);
 
+  /* ====================================================
+     REQUEST OTP
+  ==================================================== */
+
   const requestOtp = async (
     event
   ) => {
@@ -816,13 +872,18 @@ function ForgotPassword({
           "/api/password-reset",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
-              action: "request",
-              mobile: cleanMobile,
+              action:
+                "request",
+
+              mobile:
+                cleanMobile,
             }),
           }
         );
@@ -837,7 +898,10 @@ function ForgotPassword({
         );
       }
 
-      setMobile(cleanMobile);
+      setMobile(
+        cleanMobile
+      );
+
       setStep(2);
 
       alert(
@@ -858,6 +922,10 @@ function ForgotPassword({
     }
   };
 
+  /* ====================================================
+     VERIFY OTP
+  ==================================================== */
+
   const verifyReset = async (
     event
   ) => {
@@ -870,7 +938,9 @@ function ForgotPassword({
       return;
     }
 
-    if (newPassword.length < 6) {
+    if (
+      newPassword.length < 6
+    ) {
       alert(
         "नया Password कम से कम 6 characters का होना चाहिए।"
       );
@@ -895,14 +965,20 @@ function ForgotPassword({
           "/api/password-reset",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
-              action: "verify",
+              action:
+                "verify",
+
               mobile,
+
               otp,
+
               newPassword,
             }),
           }
@@ -955,7 +1031,9 @@ function ForgotPassword({
           </p>
 
           <form
-            onSubmit={requestOtp}
+            onSubmit={
+              requestOtp
+            }
           >
             <label>
               📱 Mobile Number
@@ -995,7 +1073,9 @@ function ForgotPassword({
           </p>
 
           <form
-            onSubmit={verifyReset}
+            onSubmit={
+              verifyReset
+            }
           >
             <label>
               🔢 OTP
@@ -1038,7 +1118,9 @@ function ForgotPassword({
             <input
               type="password"
               placeholder="Password दोबारा डालें"
-              value={confirmPassword}
+              value={
+                confirmPassword
+              }
               onChange={(e) =>
                 setConfirmPassword(
                   e.target.value
@@ -1089,7 +1171,9 @@ function AdminLogin({
   onBack,
 }) {
   const [email, setEmail] =
-    useState(ADMIN_EMAIL);
+    useState(
+      ADMIN_EMAIL
+    );
 
   const [password, setPassword] =
     useState("");
@@ -1135,7 +1219,9 @@ function AdminLogin({
         return;
       }
 
-      onSuccess?.(result.user);
+      onSuccess?.(
+        result.user
+      );
     } catch (error) {
       console.error(
         "Admin Login:",
@@ -1162,7 +1248,7 @@ function AdminLogin({
       </h1>
 
       <p>
-        Admin के लिए Email + Password इस्तेमाल करें
+        Admin के लिए Email + Password
       </p>
 
       <form
@@ -1220,9 +1306,7 @@ function AdminLogin({
 }
 
 /* ======================================================
-   ADMIN PASSWORD RESET
-   IMPORTANT:
-   अलग PasswordResetAdmin.jsx की जरूरत नहीं है.
+   PASSWORD RESET ADMIN
 ====================================================== */
 
 function PasswordResetAdmin() {
@@ -1260,6 +1344,7 @@ function PasswordResetAdmin() {
             "/api/password-reset?action=list",
             {
               method: "GET",
+
               headers: {
                 Authorization:
                   `Bearer ${token}`,
@@ -1306,11 +1391,14 @@ function PasswordResetAdmin() {
   const generateOtp =
     async (request) => {
       try {
-        setGenerating(
+        const requestKey =
           request.requestId ||
-            request.id ||
-            request.mobile ||
-            ""
+          request.id ||
+          request.mobile ||
+          "";
+
+        setGenerating(
+          requestKey
         );
 
         setMessage("");
@@ -1332,14 +1420,18 @@ function PasswordResetAdmin() {
             "/api/password-reset",
             {
               method: "POST",
+
               headers: {
                 "Content-Type":
                   "application/json",
+
                 Authorization:
                   `Bearer ${token}`,
               },
+
               body: JSON.stringify({
-                action: "generate",
+                action:
+                  "generate",
 
                 requestId:
                   request.requestId ||
@@ -1403,10 +1495,13 @@ function PasswordResetAdmin() {
           display: "flex",
           justifyContent:
             "space-between",
-          alignItems: "center",
+          alignItems:
+            "center",
           gap: "12px",
-          flexWrap: "wrap",
-          marginBottom: "20px",
+          flexWrap:
+            "wrap",
+          marginBottom:
+            "20px",
         }}
       >
         <div>
@@ -1422,14 +1517,25 @@ function PasswordResetAdmin() {
 
         <button
           type="button"
-          onClick={loadRequests}
+          onClick={
+            loadRequests
+          }
           disabled={loading}
           style={{
-            padding: "10px 16px",
-            border: "none",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontWeight: "700",
+            padding:
+              "10px 16px",
+
+            border:
+              "none",
+
+            borderRadius:
+              "8px",
+
+            cursor:
+              "pointer",
+
+            fontWeight:
+              "700",
           }}
         >
           {loading
@@ -1441,29 +1547,47 @@ function PasswordResetAdmin() {
       {message && (
         <div
           style={{
-            padding: "12px",
-            marginBottom: "15px",
-            background: "#f3f4f6",
-            borderRadius: "8px",
-            fontWeight: "600",
+            padding:
+              "12px",
+
+            marginBottom:
+              "15px",
+
+            background:
+              "#f3f4f6",
+
+            borderRadius:
+              "8px",
+
+            fontWeight:
+              "600",
           }}
         >
           {message}
         </div>
       )}
 
-      {requests.length === 0 ? (
+      {requests.length ===
+      0 ? (
         <div
           style={{
-            padding: "30px",
-            textAlign: "center",
-            background: "#f8fafc",
-            borderRadius: "12px",
+            padding:
+              "30px",
+
+            textAlign:
+              "center",
+
+            background:
+              "#f8fafc",
+
+            borderRadius:
+              "12px",
           }}
         >
           <div
             style={{
-              fontSize: "40px",
+              fontSize:
+                "40px",
             }}
           >
             📭
@@ -1481,12 +1605,18 @@ function PasswordResetAdmin() {
       ) : (
         <div
           style={{
-            display: "grid",
-            gap: "15px",
+            display:
+              "grid",
+
+            gap:
+              "15px",
           }}
         >
           {requests.map(
-            (request, index) => {
+            (
+              request,
+              index
+            ) => {
               const key =
                 request.requestId ||
                 request.id ||
@@ -1503,28 +1633,42 @@ function PasswordResetAdmin() {
                 "Pending";
 
               const isGenerating =
-                generating === key;
+                generating ===
+                key;
 
               return (
                 <div
                   key={key}
                   style={{
-                    background: "#fff",
+                    background:
+                      "#fff",
+
                     border:
                       "1px solid #e5e7eb",
-                    borderRadius: "12px",
-                    padding: "18px",
+
+                    borderRadius:
+                      "12px",
+
+                    padding:
+                      "18px",
+
                     boxShadow:
                       "0 3px 12px rgba(0,0,0,.06)",
                   }}
                 >
                   <div
                     style={{
-                      display: "flex",
+                      display:
+                        "flex",
+
                       justifyContent:
                         "space-between",
-                      gap: "15px",
-                      flexWrap: "wrap",
+
+                      gap:
+                        "15px",
+
+                      flexWrap:
+                        "wrap",
                     }}
                   >
                     <div>
@@ -1571,13 +1715,7 @@ function PasswordResetAdmin() {
                       )}
                     </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems:
-                          "center",
-                      }}
-                    >
+                    <div>
                       <button
                         type="button"
                         onClick={() =>
@@ -1591,13 +1729,18 @@ function PasswordResetAdmin() {
                         style={{
                           padding:
                             "12px 18px",
-                          border: "none",
+
+                          border:
+                            "none",
+
                           borderRadius:
                             "8px",
+
                           cursor:
                             isGenerating
                               ? "wait"
                               : "pointer",
+
                           fontWeight:
                             "800",
                         }}
@@ -1625,15 +1768,20 @@ function PasswordResetAdmin() {
 function HomePage({
   user,
   userData,
-  onLogin,
-  onRegister,
   onLogout,
   onNavigate,
 }) {
   return (
     <div className="app-container">
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <header className="top-header">
+
         <div className="brand">
+
           <div className="brand-logo">
             📚
           </div>
@@ -1647,12 +1795,17 @@ function HomePage({
               Competitive Exam Preparation
             </small>
           </div>
+
         </div>
 
         <div className="header-actions">
-          {user ? (
+
+          {user && (
             <>
-              <span className="welcome-user">
+              {/* USER NAME */}
+              <span
+                className="welcome-user"
+              >
                 👤{" "}
                 {userData?.name ||
                   user.displayName ||
@@ -1661,34 +1814,29 @@ function HomePage({
 
               <button
                 type="button"
-                onClick={onLogout}
+                onClick={
+                  onLogout
+                }
               >
                 Logout
               </button>
             </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onLogin}
-              >
-                Login
-              </button>
-
-              <button
-                type="button"
-                onClick={onRegister}
-              >
-                Create Account
-              </button>
-            </>
           )}
+
         </div>
+
       </header>
 
+      {/* =================================================
+          HOME CONTENT
+      ================================================= */}
+
       <main className="home-content">
+
         <section className="hero-section">
+
           <div>
+
             <span className="hero-badge">
               🎯 EXAM PREPARATION
             </span>
@@ -1708,42 +1856,39 @@ function HomePage({
               तैयारी एक ही जगह करें।
             </p>
 
-            {!user && (
-              <div className="hero-buttons">
-                <button
-                  type="button"
-                  onClick={onRegister}
-                >
-                  🚀 Create Account
-                </button>
+            {/* =================================================
+                USER NAME MESSAGE
+            ================================================= */}
 
-                <button
-                  type="button"
-                  onClick={onLogin}
-                >
-                  🔐 Login
-                </button>
-              </div>
-            )}
+            <p className="logged-message">
+              ✅ Welcome{" "}
+              <strong>
+                {userData?.name ||
+                  user?.displayName ||
+                  "User"}
+              </strong>
 
-            {user && (
-              <p className="logged-message">
-                ✅ आप Login हैं
+              {userData?.preparation
+                ? ` • तैयारी: ${userData.preparation}`
+                : ""}
+            </p>
 
-                {userData?.preparation
-                  ? ` • तैयारी: ${userData.preparation}`
-                  : ""}
-              </p>
-            )}
           </div>
+
         </section>
 
+        {/* =================================================
+            EXAMS
+        ================================================= */}
+
         <section className="section-block">
+
           <h2>
             📚 Exam Preparation
           </h2>
 
           <div className="exam-grid">
+
             {exams.map(
               (exam) => (
                 <button
@@ -1774,20 +1919,33 @@ function HomePage({
                 </button>
               )
             )}
+
           </div>
+
         </section>
 
+        {/* =================================================
+            FEATURES
+        ================================================= */}
+
         <section className="feature-grid">
+
           <button
             type="button"
             onClick={() =>
-              onNavigate("mcq")
+              onNavigate(
+                "mcq"
+              )
             }
           >
-            <span>📝</span>
+            <span>
+              📝
+            </span>
+
             <strong>
               MCQ Practice
             </strong>
+
             <small>
               Important Questions
             </small>
@@ -1796,13 +1954,19 @@ function HomePage({
           <button
             type="button"
             onClick={() =>
-              onNavigate("tests")
+              onNavigate(
+                "tests"
+              )
             }
           >
-            <span>🎯</span>
+            <span>
+              🎯
+            </span>
+
             <strong>
               Test Series
             </strong>
+
             <small>
               Mock Tests
             </small>
@@ -1811,13 +1975,19 @@ function HomePage({
           <button
             type="button"
             onClick={() =>
-              onNavigate("current")
+              onNavigate(
+                "current"
+              )
             }
           >
-            <span>📰</span>
+            <span>
+              📰
+            </span>
+
             <strong>
               Current Affairs
             </strong>
+
             <small>
               Daily Updates
             </small>
@@ -1826,25 +1996,33 @@ function HomePage({
           <button
             type="button"
             onClick={() =>
-              onNavigate("ai")
+              onNavigate(
+                "ai"
+              )
             }
           >
-            <span>🤖</span>
+            <span>
+              🤖
+            </span>
+
             <strong>
               AI MCQ Generator
             </strong>
+
             <small>
               Generate Questions
             </small>
           </button>
+
         </section>
+
       </main>
     </div>
   );
 }
 
 /* ======================================================
-   SIMPLE MCQ PAGE
+   MCQ PAGE
 ====================================================== */
 
 function MCQPage({
@@ -1852,6 +2030,7 @@ function MCQPage({
 }) {
   return (
     <div className="page-container">
+
       <button
         type="button"
         onClick={onBack}
@@ -1868,6 +2047,7 @@ function MCQPage({
         आपके MCQ / Test modules
         यहाँ उपलब्ध होंगे।
       </p>
+
     </div>
   );
 }
@@ -1881,6 +2061,7 @@ function TestsPage({
 }) {
   return (
     <div className="page-container">
+
       <button
         type="button"
         onClick={onBack}
@@ -1897,6 +2078,7 @@ function TestsPage({
         आपकी Test Series यहाँ
         दिखाई जाएगी।
       </p>
+
     </div>
   );
 }
@@ -1910,6 +2092,7 @@ function ResourcesPage({
 }) {
   return (
     <div className="page-container">
+
       <button
         type="button"
         onClick={onBack}
@@ -1923,6 +2106,7 @@ function ResourcesPage({
       </h1>
 
       <div className="resource-list">
+
         <div>
           📖 NCERT Books
         </div>
@@ -1938,8 +2122,63 @@ function ResourcesPage({
         <div>
           📰 Current Affairs
         </div>
+
       </div>
+
     </div>
+  );
+}
+
+/* ======================================================
+   LOGIN REQUIRED SCREEN
+====================================================== */
+
+function LoginRequiredPage({
+  onLogin,
+  onRegister,
+  onAdmin,
+}) {
+  return (
+    <AuthShell>
+
+      <div className="auth-icon">
+        🔐
+      </div>
+
+      <h1>
+        {APP_NAME}
+      </h1>
+
+      <p>
+        इस Website का उपयोग करने के लिए
+        पहले Login करें।
+      </p>
+
+      <button
+        type="button"
+        className="auth-primary-btn"
+        onClick={onLogin}
+      >
+        🔐 Login करें
+      </button>
+
+      <button
+        type="button"
+        className="create-account-btn"
+        onClick={onRegister}
+      >
+        📝 Create Account
+      </button>
+
+      <button
+        type="button"
+        className="admin-login-link"
+        onClick={onAdmin}
+      >
+        👨‍💼 Admin Login
+      </button>
+
+    </AuthShell>
   );
 }
 
@@ -1948,6 +2187,7 @@ function ResourcesPage({
 ====================================================== */
 
 export default function App() {
+
   const [
     firebaseUser,
     setFirebaseUser,
@@ -1978,45 +2218,105 @@ export default function App() {
   ==================================================== */
 
   useEffect(() => {
+
     const unsubscribe =
       onAuthStateChanged(
         auth,
         async (user) => {
-          setFirebaseUser(user);
+
+          setFirebaseUser(
+            user
+          );
 
           if (user) {
+
             const data =
               await getUserData(
                 user.uid
               );
 
-            setUserData(data);
+            setUserData(
+              data
+            );
+
+            /*
+              ADMIN
+            */
 
             if (
               user.email?.toLowerCase() ===
               ADMIN_EMAIL.toLowerCase()
             ) {
-              setScreen("admin");
-              setAuthPage(null);
+
+              setScreen(
+                "admin"
+              );
+
+              setAuthPage(
+                null
+              );
+
+            } else {
+
+              /*
+                USER LOGIN
+              */
+
+              setScreen(
+                "home"
+              );
+
+              setAuthPage(
+                null
+              );
             }
+
           } else {
-            setUserData(null);
+
+            /*
+              NO USER
+            */
+
+            setUserData(
+              null
+            );
+
+            /*
+              बिना Login कोई protected
+              page नहीं खुलेगा।
+            */
+
+            setScreen(
+              "home"
+            );
+
+            /*
+              Login automatically open
+            */
+
+            setAuthPage(
+              "login"
+            );
           }
 
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       );
 
     return () =>
       unsubscribe();
+
   }, []);
 
   /* ====================================================
-     REFRESH USER
+     REFRESH USER DATA
   ==================================================== */
 
   const refreshUserData =
     async (user) => {
+
       if (!user?.uid) {
         return;
       }
@@ -2026,7 +2326,9 @@ export default function App() {
           user.uid
         );
 
-      setUserData(data);
+      setUserData(
+        data
+      );
     };
 
   /* ====================================================
@@ -2035,12 +2337,43 @@ export default function App() {
 
   const handleUserLogin =
     async (user) => {
+
+      /*
+        Admin को User Login से
+        enter नहीं करने देना
+      */
+
+      if (
+        user.email?.toLowerCase() ===
+        ADMIN_EMAIL.toLowerCase()
+      ) {
+
+        await signOut(
+          auth
+        );
+
+        alert(
+          "Admin के लिए Admin Login इस्तेमाल करें।"
+        );
+
+        return;
+      }
+
       await refreshUserData(
         user
       );
 
-      setAuthPage(null);
-      setScreen("home");
+      setFirebaseUser(
+        user
+      );
+
+      setAuthPage(
+        null
+      );
+
+      setScreen(
+        "home"
+      );
     };
 
   /* ====================================================
@@ -2049,7 +2382,15 @@ export default function App() {
 
   const handleRegisterSuccess =
     (user) => {
-      setFirebaseUser(user);
+
+      setFirebaseUser(
+        user
+      );
+
+      /*
+        Registration के बाद
+        Exam Selection खुलेगा।
+      */
 
       setAuthPage(
         "exam-selection"
@@ -2062,14 +2403,21 @@ export default function App() {
 
   const handleExamComplete =
     async () => {
+
       if (firebaseUser) {
+
         await refreshUserData(
           firebaseUser
         );
       }
 
-      setAuthPage(null);
-      setScreen("home");
+      setAuthPage(
+        null
+      );
+
+      setScreen(
+        "home"
+      );
     };
 
   /* ====================================================
@@ -2078,19 +2426,88 @@ export default function App() {
 
   const logout =
     async () => {
-      try {
-        await signOut(auth);
 
-        setFirebaseUser(null);
-        setUserData(null);
-        setScreen("home");
-        setAuthPage(null);
+      try {
+
+        await signOut(
+          auth
+        );
+
+        setFirebaseUser(
+          null
+        );
+
+        setUserData(
+          null
+        );
+
+        setScreen(
+          "home"
+        );
+
+        /*
+          Logout के बाद Login
+          फिर से खुलेगा।
+        */
+
+        setAuthPage(
+          "login"
+        );
+
       } catch (error) {
+
         alert(
           "Logout Error: " +
             error.message
         );
       }
+    };
+
+  /* ====================================================
+     NAVIGATION PROTECTION
+  ==================================================== */
+
+  const protectedNavigate =
+    (targetScreen) => {
+
+      /*
+        User Login नहीं है
+      */
+
+      if (!firebaseUser) {
+
+        setAuthPage(
+          "login"
+        );
+
+        return;
+      }
+
+      /*
+        Admin को user pages से अलग
+        रखा जा सकता है।
+      */
+
+      if (
+        firebaseUser.email?.toLowerCase() ===
+        ADMIN_EMAIL.toLowerCase()
+      ) {
+
+        /*
+          Admin के लिए normal
+          website भी खुल सकती है।
+        */
+
+        setScreen(
+          targetScreen
+        );
+
+        return;
+      }
+
+      setScreen(
+        targetScreen
+      );
     };
 
   /* ====================================================
@@ -2108,33 +2525,6 @@ export default function App() {
 
   const appPage =
     useMemo(() => {
-      /* ================================================
-         CURRENT AFFAIRS
-      ================================================ */
-
-      if (
-        screen === "current"
-      ) {
-        return (
-          <div className="page-container">
-            <CurrentAffairs />
-          </div>
-        );
-      }
-
-      /* ================================================
-         AI MCQ
-      ================================================ */
-
-      if (
-        screen === "ai"
-      ) {
-        return (
-          <div className="page-container">
-            <AIMCQGenerator />
-          </div>
-        );
-      }
 
       /* ================================================
          ADMIN PANEL
@@ -2143,10 +2533,15 @@ export default function App() {
       if (
         screen === "admin"
       ) {
+
         if (!isAdmin) {
+
           return (
             <AdminLogin
-              onSuccess={(user) => {
+              onSuccess={(
+                user
+              ) => {
+
                 setFirebaseUser(
                   user
                 );
@@ -2155,8 +2550,11 @@ export default function App() {
                   "admin"
                 );
 
-                setAuthPage(null);
+                setAuthPage(
+                  null
+                );
               }}
+
               onBack={() =>
                 setScreen(
                   "home"
@@ -2168,12 +2566,15 @@ export default function App() {
 
         return (
           <div>
+
             <div className="admin-topbar">
+
               <strong>
                 👨‍💼 {APP_NAME} Admin Panel
               </strong>
 
               <div>
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2204,10 +2605,13 @@ export default function App() {
                 >
                   Logout
                 </button>
+
               </div>
+
             </div>
 
             <AdminPanel />
+
           </div>
         );
       }
@@ -2220,10 +2624,15 @@ export default function App() {
         screen ===
         "password-reset-admin"
       ) {
+
         if (!isAdmin) {
+
           return (
             <AdminLogin
-              onSuccess={(user) => {
+              onSuccess={(
+                user
+              ) => {
+
                 setFirebaseUser(
                   user
                 );
@@ -2232,8 +2641,11 @@ export default function App() {
                   "password-reset-admin"
                 );
 
-                setAuthPage(null);
+                setAuthPage(
+                  null
+                );
               }}
+
               onBack={() =>
                 setScreen(
                   "home"
@@ -2245,12 +2657,15 @@ export default function App() {
 
         return (
           <div>
+
             <div className="admin-topbar">
+
               <strong>
                 🔑 {APP_NAME} Password Reset
               </strong>
 
               <div>
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2281,10 +2696,83 @@ export default function App() {
                 >
                   Logout
                 </button>
+
               </div>
+
             </div>
 
             <PasswordResetAdmin />
+
+          </div>
+        );
+      }
+
+      /* ================================================
+         PROTECTED PAGES
+      ================================================ */
+
+      if (
+        !firebaseUser &&
+        screen !== "home"
+      ) {
+
+        return null;
+      }
+
+      /* ================================================
+         CURRENT AFFAIRS
+      ================================================ */
+
+      if (
+        screen === "current"
+      ) {
+
+        return (
+          <div className="page-container">
+
+            <button
+              type="button"
+              className="back-btn"
+              onClick={() =>
+                setScreen(
+                  "home"
+                )
+              }
+            >
+              ← Home
+            </button>
+
+            <CurrentAffairs />
+
+          </div>
+        );
+      }
+
+      /* ================================================
+         AI MCQ
+      ================================================ */
+
+      if (
+        screen === "ai"
+      ) {
+
+        return (
+          <div className="page-container">
+
+            <button
+              type="button"
+              className="back-btn"
+              onClick={() =>
+                setScreen(
+                  "home"
+                )
+              }
+            >
+              ← Home
+            </button>
+
+            <AIMCQGenerator />
+
           </div>
         );
       }
@@ -2296,6 +2784,7 @@ export default function App() {
       if (
         screen === "mcq"
       ) {
+
         return (
           <MCQPage
             onBack={() =>
@@ -2314,6 +2803,7 @@ export default function App() {
       if (
         screen === "tests"
       ) {
+
         return (
           <TestsPage
             onBack={() =>
@@ -2332,6 +2822,7 @@ export default function App() {
       if (
         screen === "resources"
       ) {
+
         return (
           <ResourcesPage
             onBack={() =>
@@ -2352,27 +2843,21 @@ export default function App() {
           user={
             firebaseUser
           }
+
           userData={
             userData
           }
-          onLogin={() =>
-            setAuthPage(
-              "login"
-            )
-          }
-          onRegister={() =>
-            setAuthPage(
-              "register"
-            )
-          }
+
           onLogout={
             logout
           }
+
           onNavigate={
-            setScreen
+            protectedNavigate
           }
         />
       );
+
     }, [
       screen,
       firebaseUser,
@@ -2385,8 +2870,10 @@ export default function App() {
   ==================================================== */
 
   if (loading) {
+
     return (
       <div className="app-loading">
+
         <div className="loading-logo">
           📚
         </div>
@@ -2398,6 +2885,7 @@ export default function App() {
         <p>
           Loading...
         </p>
+
       </div>
     );
   }
@@ -2408,92 +2896,114 @@ export default function App() {
 
   return (
     <>
+
       {appPage}
 
-      {/* ================================================
+      {/* =================================================
+          NO LOGIN = LOGIN REQUIRED
+      ================================================= */}
+
+      {!firebaseUser &&
+        !authPage && (
+          <LoginRequiredPage
+            onLogin={() =>
+              setAuthPage(
+                "login"
+              )
+            }
+
+            onRegister={() =>
+              setAuthPage(
+                "register"
+              )
+            }
+
+            onAdmin={() =>
+              setAuthPage(
+                "admin"
+              )
+            }
+          />
+        )}
+
+      {/* =================================================
           USER LOGIN
-      ================================================ */}
+      ================================================= */}
 
       {authPage ===
         "login" && (
         <LoginPage
+
           onSuccess={
             handleUserLogin
           }
+
           onRegister={() =>
             setAuthPage(
               "register"
             )
           }
+
           onForgot={() =>
             setAuthPage(
               "forgot"
             )
           }
+
           onAdmin={() =>
             setAuthPage(
               "admin"
             )
           }
-          onClose={() =>
-            setAuthPage(
-              null
-            )
-          }
         />
       )}
 
-      {/* ================================================
+      {/* =================================================
           REGISTER
-      ================================================ */}
+      ================================================= */}
 
       {authPage ===
         "register" && (
         <RegisterPage
+
           onSuccess={
             handleRegisterSuccess
           }
+
           onLogin={() =>
             setAuthPage(
               "login"
             )
           }
-          onClose={() =>
-            setAuthPage(
-              null
-            )
-          }
         />
       )}
 
-      {/* ================================================
+      {/* =================================================
           EXAM SELECTION
-      ================================================ */}
+      ================================================= */}
 
       {authPage ===
         "exam-selection" && (
         <ExamSelectionPage
+
           user={
             firebaseUser
           }
+
           onComplete={
             handleExamComplete
-          }
-          onClose={() =>
-            setAuthPage(
-              null
-            )
           }
         />
       )}
 
-      {/* ================================================
+      {/* =================================================
           FORGOT PASSWORD
-      ================================================ */}
+      ================================================= */}
 
       {authPage ===
         "forgot" && (
         <ForgotPassword
+
           onBack={() =>
             setAuthPage(
               "login"
@@ -2502,14 +3012,18 @@ export default function App() {
         />
       )}
 
-      {/* ================================================
+      {/* =================================================
           ADMIN LOGIN
-      ================================================ */}
+      ================================================= */}
 
       {authPage ===
         "admin" && (
         <AdminLogin
-          onSuccess={(user) => {
+
+          onSuccess={(
+            user
+          ) => {
+
             setFirebaseUser(
               user
             );
@@ -2522,6 +3036,7 @@ export default function App() {
               "admin"
             );
           }}
+
           onBack={() =>
             setAuthPage(
               "login"
@@ -2529,6 +3044,7 @@ export default function App() {
           }
         />
       )}
+
     </>
   );
 }
