@@ -6,20 +6,21 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
-  sendPasswordResetEmail,
 } from "firebase/auth";
 
 import {
   getDatabase,
   ref,
   set,
-  get,
 } from "firebase/database";
 
-import { getApps, getApp, initializeApp } from "firebase/app";
+import {
+  getApps,
+  getApp,
+  initializeApp,
+} from "firebase/app";
 
 import firebaseConfig from "../firebase-config.json";
-
 
 // ======================================================
 // FIREBASE
@@ -37,19 +38,56 @@ const firebaseApp = getApps().length
 const auth = getAuth(firebaseApp);
 const db = getDatabase(firebaseApp);
 
+// ======================================================
+// APP NAME
+// ======================================================
+
+const APP_NAME = "Exam Test";
 
 // ======================================================
-// MAKE SAFE EMAIL FROM MOBILE
+// MOBILE NORMALIZE
 // ======================================================
 
-function mobileToEmail(mobile) {
-  const clean = String(mobile)
+function normalizeMobile(value) {
+  return String(value || "")
     .replace(/\D/g, "")
-    .replace(/^91/, "");
-
-  return `${clean}@mobile.examtest.local`;
+    .replace(/^91/, "")
+    .slice(-10);
 }
 
+// ======================================================
+// MOBILE → FIREBASE INTERNAL EMAIL
+//
+// User को Email नहीं दिखेगा.
+// Firebase Auth के लिए internal email बनाया जाएगा.
+// ======================================================
+
+function mobileToAuthEmail(mobile) {
+  const cleanMobile =
+    normalizeMobile(mobile);
+
+  return `${cleanMobile}@studywithpower.app`;
+}
+
+// ======================================================
+// EXAMS
+// ======================================================
+
+const exams = [
+  "UPSC",
+  "UPPCS",
+  "UP PET",
+  "BPSC",
+  "MPPSC",
+  "SSC",
+  "Railway / RRB",
+  "Banking",
+  "UPSSSC",
+  "RO/ARO",
+  "Police",
+  "Teaching",
+  "Other",
+];
 
 // ======================================================
 // USER AUTH
@@ -59,31 +97,58 @@ export default function UserAuth({
   onClose,
   onLoginSuccess,
 }) {
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] =
+    useState("login");
 
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Register
+  const [name, setName] =
+    useState("");
+
+  const [mobile, setMobile] =
+    useState("");
+
+  const [exam, setExam] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
   const [confirmPassword, setConfirmPassword] =
     useState("");
 
-  const [exam, setExam] = useState("");
+  // Forgot Password
+  const [forgotMobile, setForgotMobile] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [otp, setOtp] =
+    useState("");
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [newPassword, setNewPassword] =
+    useState("");
+
+  const [confirmNewPassword, setConfirmNewPassword] =
+    useState("");
+
+  const [forgotStep, setForgotStep] =
+    useState(1);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
 
   // ====================================================
-  // RESET MESSAGE
+  // CLEAR MESSAGE
   // ====================================================
 
   const clearMessages = () => {
     setMessage("");
     setError("");
   };
-
 
   // ====================================================
   // REGISTER
@@ -94,33 +159,34 @@ export default function UserAuth({
 
     clearMessages();
 
+    const cleanMobile =
+      normalizeMobile(mobile);
+
+    // Name
     if (!name.trim()) {
-      setError("कृपया अपना नाम डालें।");
-      return;
-    }
-
-    if (!mobile.trim()) {
-      setError("कृपया मोबाइल नंबर डालें।");
-      return;
-    }
-
-    const cleanMobile = mobile.replace(/\D/g, "");
-
-    if (
-      cleanMobile.length !== 10 &&
-      cleanMobile.length !== 12
-    ) {
       setError(
-        "कृपया सही 10 अंकों का मोबाइल नंबर डालें।"
+        "कृपया अपना नाम डालें।"
       );
       return;
     }
 
-    if (!email.trim()) {
-      setError("कृपया Email ID डालें।");
+    // Mobile
+    if (!/^\d{10}$/.test(cleanMobile)) {
+      setError(
+        "कृपया सही 10 अंकों का Mobile Number डालें।"
+      );
       return;
     }
 
+    // Exam
+    if (!exam) {
+      setError(
+        "कृपया अपनी परीक्षा चुनें।"
+      );
+      return;
+    }
+
+    // Password
     if (password.length < 6) {
       setError(
         "Password कम से कम 6 characters का होना चाहिए।"
@@ -128,16 +194,12 @@ export default function UserAuth({
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (
+      password !==
+      confirmPassword
+    ) {
       setError(
         "Password और Confirm Password समान नहीं हैं।"
-      );
-      return;
-    }
-
-    if (!exam) {
-      setError(
-        "कृपया बताएं कि आप किस परीक्षा की तैयारी कर रहे हैं।"
       );
       return;
     }
@@ -145,45 +207,127 @@ export default function UserAuth({
     try {
       setLoading(true);
 
-      // Firebase Auth account
+      // Firebase internal email
+      const authEmail =
+        mobileToAuthEmail(
+          cleanMobile
+        );
+
+      // ================================================
+      // CREATE FIREBASE USER
+      // ================================================
+
       const result =
         await createUserWithEmailAndPassword(
           auth,
-          email.trim().toLowerCase(),
+          authEmail,
           password
         );
 
-      const firebaseUser = result.user;
+      const firebaseUser =
+        result.user;
 
-      // Update display name
-      await updateProfile(firebaseUser, {
-        displayName: name.trim(),
-      });
+      // ================================================
+      // SAVE DISPLAY NAME
+      // ================================================
 
-      // Save user profile in Realtime Database
+      await updateProfile(
+        firebaseUser,
+        {
+          displayName:
+            name.trim(),
+        }
+      );
+
+      // ================================================
+      // USER DATA
+      // ================================================
+
+      const userData = {
+        uid: firebaseUser.uid,
+
+        name:
+          name.trim(),
+
+        mobile:
+          cleanMobile,
+
+        authEmail:
+          authEmail,
+
+        exam:
+          exam,
+
+        createdAt:
+          Date.now(),
+
+        role:
+          "user",
+
+        status:
+          "active",
+      };
+
+      // ================================================
+      // SAVE USERS/{UID}
+      // ================================================
+
       await set(
         ref(
           db,
           `users/${firebaseUser.uid}`
         ),
+        userData
+      );
+
+      // ================================================
+      // SAVE MOBILE INDEX
+      // ================================================
+
+      await set(
+        ref(
+          db,
+          `mobileUsers/${cleanMobile}`
+        ),
         {
-          uid: firebaseUser.uid,
-          name: name.trim(),
-          mobile: cleanMobile,
-          email: email.trim().toLowerCase(),
-          exam: exam,
-          createdAt: Date.now(),
-          role: "user",
-          status: "active",
+          uid:
+            firebaseUser.uid,
+
+          name:
+            name.trim(),
+
+          mobile:
+            cleanMobile,
+
+          authEmail:
+            authEmail,
+
+          exam:
+            exam,
+
+          createdAt:
+            Date.now(),
+
+          role:
+            "user",
+
+          status:
+            "active",
         }
       );
 
       setMessage(
-        "✅ Registration सफल हो गया।"
+        "✅ Account सफलतापूर्वक बन गया।"
       );
 
+      // ================================================
+      // LOGIN SUCCESS
+      // ================================================
+
       if (onLoginSuccess) {
-        onLoginSuccess(firebaseUser);
+        onLoginSuccess(
+          firebaseUser
+        );
       }
 
     } catch (err) {
@@ -197,25 +341,18 @@ export default function UserAuth({
         "auth/email-already-in-use"
       ) {
         setError(
-          "यह Email पहले से registered है। Login करें।"
-        );
-      } else if (
-        err.code ===
-        "auth/invalid-email"
-      ) {
-        setError(
-          "Email ID सही नहीं है।"
+          "❌ यह Mobile Number पहले से registered है।"
         );
       } else if (
         err.code ===
         "auth/weak-password"
       ) {
         setError(
-          "Password बहुत कमजोर है। कम से कम 6 characters रखें।"
+          "❌ Password कम से कम 6 characters का रखें।"
         );
       } else {
         setError(
-          "Registration नहीं हुआ: " +
+          "❌ Registration नहीं हुआ: " +
             err.message
         );
       }
@@ -223,7 +360,6 @@ export default function UserAuth({
       setLoading(false);
     }
   };
-
 
   // ====================================================
   // LOGIN
@@ -234,9 +370,12 @@ export default function UserAuth({
 
     clearMessages();
 
-    if (!mobile.trim()) {
+    const cleanMobile =
+      normalizeMobile(mobile);
+
+    if (!/^\d{10}$/.test(cleanMobile)) {
       setError(
-        "मोबाइल नंबर या Email ID डालें।"
+        "कृपया 10 अंकों का Mobile Number डालें।"
       );
       return;
     }
@@ -251,68 +390,15 @@ export default function UserAuth({
     try {
       setLoading(true);
 
-      let loginEmail =
-        mobile.trim().toLowerCase();
-
-      // If user entered mobile number
-      if (
-        /^[0-9+\-\s]+$/.test(
-          mobile.trim()
-        )
-      ) {
-        const cleanMobile =
-          mobile.replace(/\D/g, "");
-
-        const mobileWithout91 =
-          cleanMobile.replace(/^91/, "");
-
-        // Search user by mobile
-        const usersRef =
-          ref(db, "users");
-
-        const snapshot =
-          await get(usersRef);
-
-        if (!snapshot.exists()) {
-          setError(
-            "User account नहीं मिला। पहले Registration करें।"
-          );
-          return;
-        }
-
-        let foundUser = null;
-
-        snapshot.forEach(
-          (child) => {
-            const data =
-              child.val();
-
-            if (
-              String(
-                data?.mobile || ""
-              ).replace(/\D/g, "").replace(/^91/, "") ===
-              mobileWithout91
-            ) {
-              foundUser = data;
-            }
-          }
+      const authEmail =
+        mobileToAuthEmail(
+          cleanMobile
         );
-
-        if (!foundUser?.email) {
-          setError(
-            "इस मोबाइल नंबर से कोई account नहीं मिला।"
-          );
-          return;
-        }
-
-        loginEmail =
-          foundUser.email;
-      }
 
       const result =
         await signInWithEmailAndPassword(
           auth,
-          loginEmail,
+          authEmail,
           password
         );
 
@@ -321,7 +407,9 @@ export default function UserAuth({
       );
 
       if (onLoginSuccess) {
-        onLoginSuccess(result.user);
+        onLoginSuccess(
+          result.user
+        );
       }
 
     } catch (err) {
@@ -334,28 +422,16 @@ export default function UserAuth({
         err.code ===
           "auth/invalid-credential" ||
         err.code ===
-          "auth/wrong-password"
-      ) {
-        setError(
-          "❌ Mobile/Email या Password गलत है।"
-        );
-      } else if (
+          "auth/wrong-password" ||
         err.code ===
-        "auth/user-not-found"
+          "auth/user-not-found"
       ) {
         setError(
-          "यह account नहीं मिला। पहले Registration करें।"
-        );
-      } else if (
-        err.code ===
-        "auth/invalid-email"
-      ) {
-        setError(
-          "Email ID सही नहीं है।"
+          "❌ Mobile Number या Password गलत है।"
         );
       } else {
         setError(
-          "Login Error: " +
+          "❌ Login Error: " +
             err.message
         );
       }
@@ -364,68 +440,238 @@ export default function UserAuth({
     }
   };
 
-
   // ====================================================
-  // FORGOT PASSWORD
+  // FORGOT PASSWORD - REQUEST OTP
   // ====================================================
 
-  const handleForgotPassword =
-    async () => {
+  const handleRequestOtp =
+    async (e) => {
+      e.preventDefault();
+
       clearMessages();
 
-      const value =
-        window.prompt(
-          "अपनी registered Email ID डालें:"
+      const cleanMobile =
+        normalizeMobile(
+          forgotMobile
         );
 
-      if (!value) {
+      if (
+        !/^\d{10}$/.test(
+          cleanMobile
+        )
+      ) {
+        setError(
+          "कृपया सही 10 अंकों का Mobile Number डालें।"
+        );
         return;
       }
 
       try {
         setLoading(true);
 
-        await sendPasswordResetEmail(
-          auth,
-          value.trim().toLowerCase()
+        const response =
+          await fetch(
+            "/api/password-reset",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body:
+                JSON.stringify({
+                  action:
+                    "request",
+
+                  mobile:
+                    cleanMobile,
+                }),
+            }
+          );
+
+        // ============================================
+        // JSON ERROR SAFE HANDLING
+        // ============================================
+
+        const text =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data =
+            JSON.parse(text);
+        } catch {
+          throw new Error(
+            "Server ने JSON response नहीं दिया। Vercel /api/password-reset check करें।"
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "Password reset request failed."
+          );
+        }
+
+        setForgotMobile(
+          cleanMobile
         );
 
+        setForgotStep(2);
+
         setMessage(
-          "✅ Password reset link आपके Email पर भेज दिया गया है।"
+          "✅ Request Admin Panel में भेज दी गई है। Admin OTP Generate करके WhatsApp पर भेजेगा।"
         );
 
       } catch (err) {
         console.error(
-          "Forgot Password Error:",
+          "Forgot Password:",
           err
         );
 
-        if (
-          err.code ===
-          "auth/user-not-found"
-        ) {
-          setError(
-            "इस Email से कोई account नहीं मिला।"
-          );
-        } else {
-          setError(
-            "Password reset नहीं हुआ: " +
-              err.message
-          );
-        }
+        setError(
+          "❌ " +
+            err.message
+        );
       } finally {
         setLoading(false);
       }
     };
 
+  // ====================================================
+  // VERIFY OTP + NEW PASSWORD
+  // ====================================================
+
+  const handleVerifyOtp =
+    async (e) => {
+      e.preventDefault();
+
+      clearMessages();
+
+      if (
+        !/^\d{6}$/.test(otp)
+      ) {
+        setError(
+          "कृपया 6 अंकों का OTP डालें।"
+        );
+        return;
+      }
+
+      if (
+        newPassword.length < 6
+      ) {
+        setError(
+          "नया Password कम से कम 6 characters का होना चाहिए।"
+        );
+        return;
+      }
+
+      if (
+        newPassword !==
+        confirmNewPassword
+      ) {
+        setError(
+          "New Password और Confirm Password समान नहीं हैं।"
+        );
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const response =
+          await fetch(
+            "/api/password-reset",
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body:
+                JSON.stringify({
+                  action:
+                    "verify",
+
+                  mobile:
+                    normalizeMobile(
+                      forgotMobile
+                    ),
+
+                  otp:
+                    otp,
+
+                  newPassword:
+                    newPassword,
+                }),
+            }
+          );
+
+        const text =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data =
+            JSON.parse(text);
+        } catch {
+          throw new Error(
+            "Server ने JSON response नहीं दिया। password-reset.js check करें।"
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data.message ||
+              "OTP verification failed."
+          );
+        }
+
+        alert(
+          "✅ Password सफलतापूर्वक बदल गया। अब Mobile Number और नए Password से Login करें।"
+        );
+
+        // Reset
+        setOtp("");
+        setNewPassword("");
+        setConfirmNewPassword("");
+        setForgotMobile("");
+        setForgotStep(1);
+
+        setMode("login");
+
+      } catch (err) {
+        console.error(
+          "OTP Verify Error:",
+          err
+        );
+
+        setError(
+          "❌ " +
+            err.message
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   // ====================================================
-  // REGISTER PAGE
+  // FORGOT PASSWORD PAGE
   // ====================================================
 
-  if (mode === "register") {
+  if (
+    mode ===
+    "forgot"
+  ) {
     return (
       <div className="user-auth-overlay">
+
         <div className="user-auth-box">
 
           <button
@@ -436,6 +682,221 @@ export default function UserAuth({
           </button>
 
           <div className="user-auth-header">
+
+            <div className="user-auth-logo">
+              🔑
+            </div>
+
+            <h1>
+              Forgot Password
+            </h1>
+
+            <p>
+              {APP_NAME}
+            </p>
+
+          </div>
+
+          {error && (
+            <div className="auth-error">
+              ❌ {error}
+            </div>
+          )}
+
+          {message && (
+            <div className="auth-success">
+              {message}
+            </div>
+          )}
+
+          {/* ==========================================
+              STEP 1
+          ========================================== */}
+
+          {forgotStep === 1 && (
+            <form
+              onSubmit={
+                handleRequestOtp
+              }
+            >
+
+              <label>
+                📱 Registered Mobile Number
+              </label>
+
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="10 अंकों का Mobile Number"
+                value={
+                  forgotMobile
+                }
+                onChange={(e) =>
+                  setForgotMobile(
+                    e.target.value
+                      .replace(
+                        /\D/g,
+                        ""
+                      )
+                      .slice(
+                        0,
+                        10
+                      )
+                  )
+                }
+              />
+
+              <button
+                type="submit"
+                className="auth-main-btn"
+                disabled={
+                  loading
+                }
+              >
+                {loading
+                  ? "⏳ Request भेजी जा रही है..."
+                  : "📲 OTP Request भेजें"}
+              </button>
+
+            </form>
+          )}
+
+          {/* ==========================================
+              STEP 2
+          ========================================== */}
+
+          {forgotStep === 2 && (
+            <form
+              onSubmit={
+                handleVerifyOtp
+              }
+            >
+
+              <label>
+                🔢 WhatsApp OTP
+              </label>
+
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="6 अंकों का OTP"
+                value={otp}
+                onChange={(e) =>
+                  setOtp(
+                    e.target.value
+                      .replace(
+                        /\D/g,
+                        ""
+                      )
+                      .slice(
+                        0,
+                        6
+                      )
+                  )
+                }
+              />
+
+              <label>
+                🔐 नया Password
+              </label>
+
+              <input
+                type="password"
+                placeholder="नया Password"
+                value={
+                  newPassword
+                }
+                onChange={(e) =>
+                  setNewPassword(
+                    e.target.value
+                  )
+                }
+              />
+
+              <label>
+                🔐 Confirm Password
+              </label>
+
+              <input
+                type="password"
+                placeholder="Password दोबारा डालें"
+                value={
+                  confirmNewPassword
+                }
+                onChange={(e) =>
+                  setConfirmNewPassword(
+                    e.target.value
+                  )
+                }
+              />
+
+              <button
+                type="submit"
+                className="auth-main-btn"
+                disabled={
+                  loading
+                }
+              >
+                {loading
+                  ? "⏳ Password बदल रहा है..."
+                  : "✅ Password Reset करें"}
+              </button>
+
+              <button
+                type="button"
+                className="forgot-btn"
+                onClick={() => {
+                  clearMessages();
+                  setForgotStep(1);
+                }}
+              >
+                ← Mobile Number बदलें
+              </button>
+
+            </form>
+          )}
+
+          <button
+            className="auth-switch"
+            onClick={() => {
+              clearMessages();
+              setMode("login");
+              setForgotStep(1);
+            }}
+          >
+            ← Login पर वापस जाएँ
+          </button>
+
+        </div>
+
+      </div>
+    );
+  }
+
+  // ====================================================
+  // REGISTER PAGE
+  // ====================================================
+
+  if (
+    mode ===
+    "register"
+  ) {
+    return (
+      <div className="user-auth-overlay">
+
+        <div className="user-auth-box">
+
+          <button
+            className="user-auth-close"
+            onClick={onClose}
+          >
+            ×
+          </button>
+
+          <div className="user-auth-header">
+
             <div className="user-auth-logo">
               📚
             </div>
@@ -445,8 +906,9 @@ export default function UserAuth({
             </h1>
 
             <p>
-              Exam Test पर अपना account बनाएं
+              {APP_NAME} पर अपना account बनाएं
             </p>
+
           </div>
 
           {error && (
@@ -482,39 +944,30 @@ export default function UserAuth({
               }
             />
 
-
             <label>
-              📱 मोबाइल नंबर
+              📱 Mobile Number
             </label>
 
             <input
               type="tel"
-              placeholder="10 अंकों का मोबाइल नंबर"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="10 अंकों का Mobile Number"
               value={mobile}
               onChange={(e) =>
                 setMobile(
                   e.target.value
-                )
-              }
-              maxLength={13}
-            />
-
-
-            <label>
-              📧 Email ID
-            </label>
-
-            <input
-              type="email"
-              placeholder="example@gmail.com"
-              value={email}
-              onChange={(e) =>
-                setEmail(
-                  e.target.value
+                    .replace(
+                      /\D/g,
+                      ""
+                    )
+                    .slice(
+                      0,
+                      10
+                    )
                 )
               }
             />
-
 
             <label>
               🎯 किस परीक्षा की तैयारी कर रहे हैं?
@@ -528,63 +981,23 @@ export default function UserAuth({
                 )
               }
             >
+
               <option value="">
                 परीक्षा चुनें
               </option>
 
-              <option value="UPSC">
-                UPSC
-              </option>
+              {exams.map(
+                (item) => (
+                  <option
+                    key={item}
+                    value={item}
+                  >
+                    {item}
+                  </option>
+                )
+              )}
 
-              <option value="UPPCS">
-                UPPCS
-              </option>
-
-              <option value="UP PET">
-                UP PET
-              </option>
-
-              <option value="BPSC">
-                BPSC
-              </option>
-
-              <option value="MPPSC">
-                MPPSC
-              </option>
-
-              <option value="SSC">
-                SSC
-              </option>
-
-              <option value="Railway">
-                Railway / RRB
-              </option>
-
-              <option value="Banking">
-                Banking
-              </option>
-
-              <option value="UPSSSC">
-                UPSSSC
-              </option>
-
-              <option value="RO/ARO">
-                RO/ARO
-              </option>
-
-              <option value="Police">
-                Police
-              </option>
-
-              <option value="Teaching">
-                Teaching
-              </option>
-
-              <option value="Other">
-                Other
-              </option>
             </select>
-
 
             <label>
               🔐 Create Password
@@ -600,7 +1013,6 @@ export default function UserAuth({
                 )
               }
             />
-
 
             <label>
               🔐 Confirm Password
@@ -619,11 +1031,12 @@ export default function UserAuth({
               }
             />
 
-
             <button
               type="submit"
               className="auth-main-btn"
-              disabled={loading}
+              disabled={
+                loading
+              }
             >
               {loading
                 ? "⏳ Account बन रहा है..."
@@ -632,27 +1045,27 @@ export default function UserAuth({
 
           </form>
 
-
           <div className="auth-switch">
+
             Account पहले से है?
 
             <button
+              type="button"
               onClick={() => {
                 clearMessages();
-                setMode(
-                  "login"
-                );
+                setMode("login");
               }}
             >
               Login करें
             </button>
+
           </div>
 
         </div>
+
       </div>
     );
   }
-
 
   // ====================================================
   // LOGIN PAGE
@@ -670,7 +1083,6 @@ export default function UserAuth({
           ×
         </button>
 
-
         <div className="user-auth-header">
 
           <div className="user-auth-logo">
@@ -678,15 +1090,14 @@ export default function UserAuth({
           </div>
 
           <h1>
-            Exam Test Login
+            {APP_NAME} Login
           </h1>
 
           <p>
-            Mobile या Email से Login करें
+            Mobile Number और Password से Login करें
           </p>
 
         </div>
-
 
         {error && (
           <div className="auth-error">
@@ -700,7 +1111,6 @@ export default function UserAuth({
           </div>
         )}
 
-
         <form
           onSubmit={
             handleLogin
@@ -708,20 +1118,29 @@ export default function UserAuth({
         >
 
           <label>
-            📱 Mobile Number / Email ID
+            📱 Mobile Number
           </label>
 
           <input
-            type="text"
-            placeholder="Mobile या Email"
+            type="tel"
+            inputMode="numeric"
+            maxLength={10}
+            placeholder="10 अंकों का Mobile Number"
             value={mobile}
             onChange={(e) =>
               setMobile(
                 e.target.value
+                  .replace(
+                    /\D/g,
+                    ""
+                  )
+                  .slice(
+                    0,
+                    10
+                  )
               )
             }
           />
-
 
           <label>
             🔐 Password
@@ -738,11 +1157,12 @@ export default function UserAuth({
             }
           />
 
-
           <button
             type="submit"
             className="auth-main-btn"
-            disabled={loading}
+            disabled={
+              loading
+            }
           >
             {loading
               ? "⏳ Login हो रहा है..."
@@ -751,17 +1171,21 @@ export default function UserAuth({
 
         </form>
 
-
         <button
+          type="button"
           className="forgot-btn"
-          onClick={
-            handleForgotPassword
+          onClick={() => {
+            clearMessages();
+            setForgotStep(1);
+            setForgotMobile("");
+            setMode("forgot");
+          }}
+          disabled={
+            loading
           }
-          disabled={loading}
         >
           🔑 Forgot Password?
         </button>
-
 
         <div className="auth-divider">
           <span>
@@ -769,24 +1193,21 @@ export default function UserAuth({
           </span>
         </div>
 
-
         <button
+          type="button"
           className="create-account-btn"
           onClick={() => {
             clearMessages();
-            setMode(
-              "register"
-            );
+            setMode("register");
           }}
         >
           📝 नया Account बनाएं
         </button>
 
-
         <div className="auth-note">
-          Mobile से Login करने के लिए
-          Registration के समय Mobile Number,
-          Email और Password सही भरें।
+          नया account बनाने के लिए
+          नाम, Mobile Number, परीक्षा और
+          Password भरें।
         </div>
 
       </div>
