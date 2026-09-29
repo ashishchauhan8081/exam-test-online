@@ -23,116 +23,12 @@ const EXAM_FOLDERS = {
   teaching: "teaching",
 };
 
-/* ======================================================
-   LOCAL QUESTION MODULES
-====================================================== */
-
-const TEST_MODULES =
-  import.meta.glob(
-    "../data/questions/*/test*.js",
-    {
-      eager: true,
-    }
-  );
-
-/* ======================================================
-   ATTEMPT STORAGE
-====================================================== */
-
-const ATTEMPT_STORAGE_KEY =
-  "study_with_power_test_attempts";
-
-/* ======================================================
-   SAVE TEST ATTEMPT
-====================================================== */
-
-function saveTestAttempt(
-  test
-) {
-  try {
-    const oldData =
-      localStorage.getItem(
-        ATTEMPT_STORAGE_KEY
-      );
-
-    let attempts = {};
-
-    if (oldData) {
-      try {
-        attempts =
-          JSON.parse(
-            oldData
-          ) || {};
-      } catch {
-        attempts = {};
-      }
-    }
-
-    const testId =
-      test?.id ||
-      test?.testId ||
-      `${test?.examId || test?.exam || test?.examName || "general"}_${test?.testNumber ?? test?.testNo ?? test?.number ?? 1}`;
-
-    attempts[
-      String(testId)
-    ] = {
-      completed: true,
-
-      completedAt:
-        new Date().toISOString(),
-
-      exam:
-        test?.exam ||
-        test?.examName ||
-        "",
-
-      examId:
-        test?.examId ||
-        test?.exam ||
-        "",
-
-      testNumber:
-        test?.testNumber ??
-        test?.testNo ??
-        test?.number ??
-        1,
-
-      title:
-        test?.title ||
-        test?.name ||
-        "Test",
-    };
-
-    localStorage.setItem(
-      ATTEMPT_STORAGE_KEY,
-      JSON.stringify(
-        attempts
-      )
-    );
-
-    /* ==============================================
-       SAME PAGE TEST SERIES UPDATE
-    ============================================== */
-
-    window.dispatchEvent(
-      new Event(
-        "testAttemptUpdated"
-      )
-    );
-
-    console.log(
-      "TEST ATTEMPT SAVED:",
-      attempts[
-        String(testId)
-      ]
-    );
-  } catch (error) {
-    console.error(
-      "TEST ATTEMPT SAVE ERROR:",
-      error
-    );
+const TEST_MODULES = import.meta.glob(
+  "../data/questions/*/test*.js",
+  {
+    eager: true,
   }
-}
+);
 
 /* ======================================================
    LOCAL QUESTIONS
@@ -146,10 +42,9 @@ function getLocalQuestions(
     EXAM_FOLDERS[examId] ||
     examId;
 
-  const number =
-    String(
-      testNumber ?? 1
-    ).padStart(2, "0");
+  const number = String(
+    testNumber ?? 1
+  ).padStart(2, "0");
 
   const key =
     `../data/questions/${folder}/test${number}.js`;
@@ -167,32 +62,20 @@ function getLocalQuestions(
 
 /* ======================================================
    GET QUESTIONS
-   Firebase → Local fallback
 ====================================================== */
 
-function getQuestions(
-  test
-) {
-  /* ==========================================
-     FIREBASE ARRAY
-  ========================================== */
-
+function getQuestions(test) {
   if (
     Array.isArray(
       test?.questions
     ) &&
-    test.questions.length >
-      0
+    test.questions.length > 0
   ) {
     return test.questions.slice(
       0,
       150
     );
   }
-
-  /* ==========================================
-     FIREBASE OBJECT
-  ========================================== */
 
   if (
     test?.questions &&
@@ -215,17 +98,11 @@ function getQuestions(
     }
   }
 
-  /* ==========================================
-     LOCAL FALLBACK
-  ========================================== */
-
   return getLocalQuestions(
     test?.examId ||
-      test?.exam ||
-      test?.examName,
-    test?.testNumber ??
-      test?.testNo ??
-      test?.number
+      test?.exam,
+    test?.testNumber ||
+      test?.testNo
   ).slice(0, 150);
 }
 
@@ -244,9 +121,10 @@ function getOptions(q) {
         value,
         index
       ) => ({
-        key: String.fromCharCode(
-          65 + index
-        ),
+        key:
+          String.fromCharCode(
+            65 + index
+          ),
 
         value:
           typeof value ===
@@ -267,13 +145,7 @@ function getOptions(q) {
     return Object.entries(
       q.options
     ).map(
-      (
-        [
-          key,
-          value,
-        ],
-        index
-      ) => ({
+      ([key, value]) => ({
         key:
           String(
             key
@@ -286,8 +158,6 @@ function getOptions(q) {
               value?.text ??
               ""
             : value,
-
-        index,
       })
     );
   }
@@ -335,7 +205,8 @@ function normalizeAnswer(
   }
 
   const text =
-    String(value).trim();
+    String(value)
+      .trim();
 
   if (!text) {
     return "";
@@ -355,9 +226,7 @@ function normalizeAnswer(
       /^([A-Da-d])\s*[).:\-]\s*/
     );
 
-  if (
-    letterWithText
-  ) {
+  if (letterWithText) {
     return letterWithText[1].toUpperCase();
   }
 
@@ -407,7 +276,7 @@ function getAnswer(q) {
 }
 
 /* ======================================================
-   CHECK ANSWER
+   CHECK CORRECT
 ====================================================== */
 
 function isCorrect(
@@ -481,6 +350,18 @@ function isCorrect(
 }
 
 /* ======================================================
+   ATTEMPT KEY
+====================================================== */
+
+function getAttemptKey(test) {
+  return `test_attempted_${String(
+    test?.id ??
+      test?.testId ??
+      `${test?.examId || test?.exam || "general"}_${test?.testNumber || test?.testNo || 1}`
+  )}`;
+}
+
+/* ======================================================
    TEST RUNNER
 ====================================================== */
 
@@ -529,7 +410,8 @@ export default function TestRunner({
     timeLeft,
     setTimeLeft,
   ] = useState(
-    durationMinutes * 60
+    durationMinutes *
+      60
   );
 
   /* ====================================================
@@ -542,7 +424,8 @@ export default function TestRunner({
     setFinished(false);
 
     setTimeLeft(
-      durationMinutes * 60
+      durationMinutes *
+        60
     );
 
     window.scrollTo({
@@ -552,9 +435,7 @@ export default function TestRunner({
   }, [
     test?.id,
     test?.examId,
-    test?.exam,
     test?.testNumber,
-    test?.testNo,
     durationMinutes,
   ]);
 
@@ -573,9 +454,7 @@ export default function TestRunner({
     const timer =
       setInterval(() => {
         setTimeLeft(
-          (
-            previous
-          ) => {
+          (previous) => {
             if (
               previous <= 1
             ) {
@@ -604,24 +483,6 @@ export default function TestRunner({
   }, [
     finished,
     questions.length,
-  ]);
-
-  /* ====================================================
-     SAVE ATTEMPT WHEN TEST FINISHES
-  ==================================================== */
-
-  useEffect(() => {
-    if (
-      finished &&
-      test
-    ) {
-      saveTestAttempt(
-        test
-      );
-    }
-  }, [
-    finished,
-    test,
   ]);
 
   /* ====================================================
@@ -680,7 +541,8 @@ export default function TestRunner({
           : 0;
 
       const score =
-        correct * marks -
+        correct *
+          marks -
         wrong *
           negativeMarks;
 
@@ -717,14 +579,35 @@ export default function TestRunner({
     }
 
     setAnswers(
-      (
-        previous
-      ) => ({
+      (previous) => ({
         ...previous,
         [current]:
           value,
       })
     );
+  };
+
+  /* ====================================================
+     SAVE ATTEMPT
+  ==================================================== */
+
+  const saveAttempt = () => {
+    try {
+      localStorage.setItem(
+        getAttemptKey(test),
+        "true"
+      );
+
+      console.log(
+        "TEST ATTEMPT SAVED:",
+        getAttemptKey(test)
+      );
+    } catch (error) {
+      console.error(
+        "Attempt save error:",
+        error
+      );
+    }
   };
 
   /* ====================================================
@@ -737,7 +620,11 @@ export default function TestRunner({
         "क्या आप Test Submit करना चाहते हैं?"
       )
     ) {
-      setFinished(true);
+      saveAttempt();
+
+      setFinished(
+        true
+      );
 
       window.scrollTo({
         top: 0,
@@ -750,51 +637,45 @@ export default function TestRunner({
      RESTART
   ==================================================== */
 
-  const restartTest =
-    () => {
-      setCurrent(0);
-      setAnswers({});
-      setFinished(false);
+  const restartTest = () => {
+    setCurrent(0);
 
-      setTimeLeft(
-        durationMinutes *
-          60
-      );
+    setAnswers({});
 
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    };
+    setFinished(false);
+
+    setTimeLeft(
+      durationMinutes *
+        60
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
 
   /* ====================================================
      TIMER FORMAT
   ==================================================== */
 
-  const formatTime =
-    (seconds) => {
-      const minutes =
-        Math.floor(
-          seconds / 60
-        )
-          .toString()
-          .padStart(
-            2,
-            "0"
-          );
+  const formatTime = (
+    seconds
+  ) => {
+    const minutes =
+      Math.floor(
+        seconds / 60
+      )
+        .toString()
+        .padStart(2, "0");
 
-      const secs =
-        (
-          seconds % 60
-        )
-          .toString()
-          .padStart(
-            2,
-            "0"
-          );
+    const secs =
+      (seconds % 60)
+        .toString()
+        .padStart(2, "0");
 
-      return `${minutes}:${secs}`;
-    };
+    return `${minutes}:${secs}`;
+  };
 
   /* ====================================================
      NO QUESTIONS
@@ -811,7 +692,6 @@ export default function TestRunner({
             📚{" "}
             {test?.examTitle ||
               test?.examName ||
-              test?.exam ||
               "Test"}
           </h2>
 
@@ -859,7 +739,7 @@ export default function TestRunner({
       <main className="ai-container">
         <div className="ai-card">
 
-          {/* RESULT HEADER */}
+          {/* HEADER */}
 
           <div
             style={{
@@ -869,9 +749,11 @@ export default function TestRunner({
                 "10px 5px 25px",
             }}
           >
+
             <div
               style={{
-                fontSize: 55,
+                fontSize:
+                  55,
               }}
             >
               🏆
@@ -900,17 +782,27 @@ export default function TestRunner({
               style={{
                 display:
                   "inline-block",
-                marginTop: 15,
+
+                marginTop:
+                  15,
+
                 padding:
                   "18px 30px",
+
                 borderRadius:
                   16,
+
                 background:
                   "#eafaf0",
+
                 color:
                   "#137333",
-                fontSize: 30,
-                fontWeight: 900,
+
+                fontSize:
+                  30,
+
+                fontWeight:
+                  900,
               }}
             >
               {scoreData.score.toFixed(
@@ -920,7 +812,8 @@ export default function TestRunner({
 
             <p
               style={{
-                fontSize: 18,
+                fontSize:
+                  18,
               }}
             >
               Score:{" "}
@@ -949,9 +842,12 @@ export default function TestRunner({
             style={{
               display:
                 "grid",
+
               gridTemplateColumns:
                 "repeat(auto-fit, minmax(130px, 1fr))",
+
               gap: 12,
+
               margin:
                 "20px 0",
             }}
@@ -959,11 +855,15 @@ export default function TestRunner({
 
             <div
               style={{
-                padding: 18,
+                padding:
+                  18,
+
                 borderRadius:
                   14,
+
                 background:
                   "#ecfdf5",
+
                 textAlign:
                   "center",
               }}
@@ -974,7 +874,8 @@ export default function TestRunner({
 
               <div
                 style={{
-                  fontSize: 28,
+                  fontSize:
+                    28,
                 }}
               >
                 {
@@ -985,11 +886,15 @@ export default function TestRunner({
 
             <div
               style={{
-                padding: 18,
+                padding:
+                  18,
+
                 borderRadius:
                   14,
+
                 background:
                   "#fef2f2",
+
                 textAlign:
                   "center",
               }}
@@ -1000,7 +905,8 @@ export default function TestRunner({
 
               <div
                 style={{
-                  fontSize: 28,
+                  fontSize:
+                    28,
                 }}
               >
                 {
@@ -1011,11 +917,15 @@ export default function TestRunner({
 
             <div
               style={{
-                padding: 18,
+                padding:
+                  18,
+
                 borderRadius:
                   14,
+
                 background:
                   "#f8fafc",
+
                 textAlign:
                   "center",
               }}
@@ -1026,7 +936,8 @@ export default function TestRunner({
 
               <div
                 style={{
-                  fontSize: 28,
+                  fontSize:
+                    28,
                 }}
               >
                 {
@@ -1122,35 +1033,45 @@ export default function TestRunner({
                     i
                   }
                   style={{
-                    marginTop: 18,
-                    padding: 18,
+                    marginTop:
+                      18,
+
+                    padding:
+                      18,
+
                     borderRadius:
                       16,
+
                     border:
                       "1px solid #dce3ed",
+
                     background:
                       "#fff",
                   }}
                 >
+
+                  {/* QUESTION */}
+
                   <h3
                     style={{
-                      marginTop: 0,
+                      marginTop:
+                        0,
+
                       lineHeight:
                         1.6,
                     }}
                   >
                     प्रश्न{" "}
                     {i + 1}.{" "}
-                    {
-                      q?.question
-                    }
+                    {q?.question}
                   </h3>
 
                   {/* USER ANSWER */}
 
                   <div
                     style={{
-                      marginTop: 8,
+                      marginTop:
+                        8,
                     }}
                   >
                     <strong>
@@ -1166,7 +1087,9 @@ export default function TestRunner({
 
                   <div
                     style={{
-                      marginTop: 6,
+                      marginTop:
+                        6,
+
                       color:
                         "#15803d",
                     }}
@@ -1187,8 +1110,11 @@ export default function TestRunner({
 
                   <div
                     style={{
-                      marginTop: 8,
-                      fontWeight: 800,
+                      marginTop:
+                        8,
+
+                      fontWeight:
+                        800,
                     }}
                   >
                     {answers[i] ===
@@ -1203,18 +1129,26 @@ export default function TestRunner({
 
                   <div
                     style={{
-                      marginTop: 12,
-                      padding: 15,
+                      marginTop:
+                        12,
+
+                      padding:
+                        15,
+
                       borderRadius:
                         12,
+
                       background:
                         "#fff8e5",
+
                       border:
                         "1px solid #f1d58a",
+
                       lineHeight:
                         1.75,
                     }}
                   >
+
                     <div>
                       💡{" "}
                       <strong>
@@ -1224,13 +1158,13 @@ export default function TestRunner({
 
                     <div
                       style={{
-                        marginTop: 6,
+                        marginTop:
+                          6,
                       }}
                     >
-                      {
-                        explanation
-                      }
+                      {explanation}
                     </div>
+
                   </div>
 
                   {/* IMPORTANT FACTS */}
@@ -1239,22 +1173,31 @@ export default function TestRunner({
                     0 && (
                     <div
                       style={{
-                        marginTop: 12,
-                        padding: 15,
+                        marginTop:
+                          12,
+
+                        padding:
+                          15,
+
                         borderRadius:
                           12,
+
                         background:
                           "#f8fafc",
+
                         border:
                           "1px solid #cbd5e1",
+
                         lineHeight:
                           1.8,
                       }}
                     >
+
                       <div
                         style={{
                           fontWeight:
                             900,
+
                           marginBottom:
                             8,
                         }}
@@ -1264,7 +1207,9 @@ export default function TestRunner({
 
                       <ul
                         style={{
-                          margin: 0,
+                          margin:
+                            0,
+
                           paddingLeft:
                             24,
                         }}
@@ -1290,6 +1235,7 @@ export default function TestRunner({
                           )
                         )}
                       </ul>
+
                     </div>
                   )}
 
@@ -1298,20 +1244,29 @@ export default function TestRunner({
                   {examTrick && (
                     <div
                       style={{
-                        marginTop: 12,
-                        padding: 15,
+                        marginTop:
+                          12,
+
+                        padding:
+                          15,
+
                         borderRadius:
                           12,
+
                         background:
                           "#eef2ff",
+
                         border:
                           "1px solid #c7d2fe",
+
                         lineHeight:
                           1.8,
+
                         fontWeight:
                           700,
                       }}
                     >
+
                       <div
                         style={{
                           marginBottom:
@@ -1329,6 +1284,7 @@ export default function TestRunner({
                           examTrick
                         }
                       </div>
+
                     </div>
                   )}
 
@@ -1343,12 +1299,17 @@ export default function TestRunner({
             style={{
               display:
                 "flex",
+
               justifyContent:
                 "center",
+
               gap: 12,
+
               flexWrap:
                 "wrap",
-              marginTop: 25,
+
+              marginTop:
+                25,
             }}
           >
 
@@ -1410,7 +1371,9 @@ export default function TestRunner({
         <button
           type="button"
           className="ai-button"
-          onClick={onBack}
+          onClick={
+            onBack
+          }
         >
           ← Test Series
         </button>
@@ -1421,14 +1384,20 @@ export default function TestRunner({
           style={{
             display:
               "flex",
+
             justifyContent:
               "space-between",
+
             alignItems:
               "center",
+
             gap: 15,
+
             flexWrap:
               "wrap",
-            marginTop: 18,
+
+            marginTop:
+              18,
           }}
         >
 
@@ -1449,7 +1418,8 @@ export default function TestRunner({
 
             <h2
               style={{
-                marginTop: 0,
+                marginTop:
+                  0,
               }}
             >
               {test?.title ||
@@ -1462,12 +1432,18 @@ export default function TestRunner({
 
           <div
             style={{
-              fontSize: 28,
-              fontWeight: 900,
+              fontSize:
+                28,
+
+              fontWeight:
+                900,
+
               color:
-                timeLeft <= 60
+                timeLeft <=
+                60
                   ? "#dc2626"
-                  : timeLeft <= 300
+                  : timeLeft <=
+                    300
                   ? "#ea580c"
                   : "#0f172a",
             }}
@@ -1484,25 +1460,35 @@ export default function TestRunner({
 
         <div
           style={{
-            marginTop: 20,
-            padding: 20,
-            borderRadius: 16,
+            marginTop:
+              20,
+
+            padding:
+              20,
+
+            borderRadius:
+              16,
+
             background:
               "#f8fafc",
+
             border:
               "1px solid #dce3ed",
           }}
         >
 
-          {/* QUESTION HEADER */}
+          {/* HEADER */}
 
           <div
             style={{
               display:
                 "flex",
+
               justifyContent:
                 "space-between",
+
               gap: 10,
+
               flexWrap:
                 "wrap",
             }}
@@ -1531,15 +1517,24 @@ export default function TestRunner({
             style={{
               width:
                 "100%",
-              height: 8,
+
+              height:
+                8,
+
               background:
                 "#e5e7eb",
+
               borderRadius:
                 10,
+
               overflow:
                 "hidden",
-              marginTop: 14,
-              marginBottom: 20,
+
+              marginTop:
+                14,
+
+              marginBottom:
+                20,
             }}
           >
 
@@ -1551,10 +1546,13 @@ export default function TestRunner({
                       questions.length) *
                     100
                   }%`,
+
                 height:
                   "100%",
+
                 background:
                   "#2563eb",
+
                 transition:
                   "width 0.2s ease",
               }}
@@ -1568,6 +1566,7 @@ export default function TestRunner({
             style={{
               lineHeight:
                 1.6,
+
               overflowWrap:
                 "anywhere",
             }}
@@ -1584,8 +1583,12 @@ export default function TestRunner({
             style={{
               display:
                 "grid",
-              gap: 12,
-              marginTop: 18,
+
+              gap:
+                12,
+
+              marginTop:
+                18,
             }}
           >
 
@@ -1613,34 +1616,49 @@ export default function TestRunner({
                     style={{
                       width:
                         "100%",
+
                       display:
                         "flex",
+
                       alignItems:
                         "flex-start",
+
                       gap: 10,
+
                       textAlign:
                         "left",
-                      padding: 16,
+
+                      padding:
+                        16,
+
                       borderRadius:
                         12,
+
                       border:
                         active
                           ? "2px solid #2563eb"
                           : "1px solid #cbd5e1",
+
                       background:
                         active
                           ? "#eff6ff"
                           : "#fff",
+
                       color:
                         "#111827",
+
                       cursor:
                         "pointer",
+
                       fontSize:
                         17,
+
                       lineHeight:
                         1.5,
+
                       boxSizing:
                         "border-box",
+
                       overflowWrap:
                         "anywhere",
                     }}
@@ -1654,14 +1672,16 @@ export default function TestRunner({
                     >
                       {
                         option.key
-                      }
-                      )
+                      })
                     </strong>
 
                     <span
                       style={{
-                        flex: 1,
-                        minWidth: 0,
+                        flex:
+                          1,
+
+                        minWidth:
+                          0,
                       }}
                     >
                       {
@@ -1684,12 +1704,17 @@ export default function TestRunner({
           style={{
             display:
               "flex",
+
             justifyContent:
               "space-between",
+
             gap: 10,
+
             flexWrap:
               "wrap",
-            marginTop: 20,
+
+            marginTop:
+              20,
           }}
         >
 
@@ -1697,13 +1722,12 @@ export default function TestRunner({
             type="button"
             className="ai-button"
             disabled={
-              current === 0
+              current ===
+              0
             }
             onClick={() =>
               setCurrent(
-                (
-                  v
-                ) =>
+                (v) =>
                   Math.max(
                     0,
                     v - 1
@@ -1723,9 +1747,7 @@ export default function TestRunner({
               className="ai-button"
               onClick={() =>
                 setCurrent(
-                  (
-                    v
-                  ) =>
+                  (v) =>
                     Math.min(
                       questions.length -
                         1,
