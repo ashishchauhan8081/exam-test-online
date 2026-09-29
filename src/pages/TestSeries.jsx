@@ -7,9 +7,14 @@ import {
 } from "firebase/app";
 
 import {
+  getAuth,
+} from "firebase/auth";
+
+import {
   getDatabase,
   ref,
   get,
+  set,
 } from "firebase/database";
 
 import firebaseConfig from "../firebase-config.json";
@@ -30,6 +35,7 @@ const firebaseApp = getApps().length
     });
 
 const db = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
 
 /* ======================================================
    HELPERS
@@ -82,10 +88,6 @@ function getPrice(test) {
 function isTestPublic(test) {
   if (!test) return false;
 
-  /*
-    अलग-अलग पुराने test formats को support किया गया है
-  */
-
   const status = String(
     test.status ??
       test.visibility ??
@@ -95,11 +97,6 @@ function isTestPublic(test) {
     .trim()
     .toLowerCase();
 
-  /*
-    Admin Panel में PUBLIC दिख रहा है,
-    इसलिए PUBLIC को जरूर allow करें।
-  */
-
   if (
     status === "public" ||
     status === "published" ||
@@ -108,10 +105,6 @@ function isTestPublic(test) {
   ) {
     return true;
   }
-
-  /*
-    Boolean fields भी support
-  */
 
   if (
     test.isPublic === true ||
@@ -135,6 +128,9 @@ export default function TestSeries({
 }) {
   const [tests, setTests] = useState([]);
 
+  const [attemptedTests, setAttemptedTests] =
+    useState({});
+
   const [loading, setLoading] =
     useState(true);
 
@@ -142,7 +138,7 @@ export default function TestSeries({
     useState("");
 
   /* ====================================================
-     LOAD TESTS
+     LOAD TESTS + USER ATTEMPTS
   ==================================================== */
 
   useEffect(() => {
@@ -157,11 +153,9 @@ export default function TestSeries({
           "TEST SERIES: Firebase से tests load हो रहे हैं..."
         );
 
-        /*
-          IMPORTANT:
-          Admin Panel में जिस path पर tests save हैं,
-          वही path यहाँ use किया गया है।
-        */
+        /* ==============================================
+           LOAD PUBLIC TESTS
+        ============================================== */
 
         const snapshot = await get(
           ref(db, "tests")
@@ -170,123 +164,154 @@ export default function TestSeries({
         if (!mounted) return;
 
         if (!snapshot.exists()) {
+          setTests([]);
+        } else {
+          const data = snapshot.val();
+
           console.log(
-            "TEST SERIES: tests path खाली है"
+            "TEST SERIES: Firebase raw data:",
+            data
           );
 
-          setTests([]);
-          return;
-        }
+          let loadedTests = [];
 
-        const data = snapshot.val();
+          /* Firebase object */
 
-        console.log(
-          "TEST SERIES: Firebase raw data:",
-          data
-        );
-
-        let loadedTests = [];
-
-        /* ==============================================
-           Firebase object format
-        ============================================== */
-
-        if (
-          data &&
-          typeof data === "object" &&
-          !Array.isArray(data)
-        ) {
-          loadedTests =
-            Object.entries(data).map(
-              ([id, test]) => ({
-                id,
-
-                ...test,
-
-                raw: {
+          if (
+            data &&
+            typeof data === "object" &&
+            !Array.isArray(data)
+          ) {
+            loadedTests =
+              Object.entries(data).map(
+                ([id, test]) => ({
                   id,
-                  ...test,
-                },
-              })
-            );
-        }
-
-        /* ==============================================
-           Firebase array format
-        ============================================== */
-
-        else if (Array.isArray(data)) {
-          loadedTests =
-            data
-              .map((test, index) => {
-                if (!test) return null;
-
-                return {
-                  id:
-                    test.id ||
-                    String(index),
 
                   ...test,
 
                   raw: {
+                    id,
+                    ...test,
+                  },
+                })
+              );
+          }
+
+          /* Firebase array */
+
+          else if (Array.isArray(data)) {
+            loadedTests =
+              data
+                .map((test, index) => {
+                  if (!test) return null;
+
+                  return {
                     id:
                       test.id ||
                       String(index),
 
                     ...test,
-                  },
-                };
-              })
-              .filter(Boolean);
-        }
 
-        console.log(
-          "TEST SERIES: Total tests:",
-          loadedTests.length
-        );
+                    raw: {
+                      id:
+                        test.id ||
+                        String(index),
 
-        /*
-          केवल PUBLIC / PUBLISHED / ACTIVE tests
-        */
+                      ...test,
+                    },
+                  };
+                })
+                .filter(Boolean);
+          }
 
-        const publicTests =
-          loadedTests.filter(
-            (test) =>
-              isTestPublic(test)
+          const publicTests =
+            loadedTests.filter(
+              (test) =>
+                isTestPublic(test)
+            );
+
+          publicTests.sort(
+            (a, b) => {
+              const aNo = Number(
+                a.testNumber ??
+                  a.testNo ??
+                  a.number ??
+                  999999
+              );
+
+              const bNo = Number(
+                b.testNumber ??
+                  b.testNo ??
+                  b.number ??
+                  999999
+              );
+
+              return aNo - bNo;
+            }
           );
 
-        console.log(
-          "TEST SERIES: Public tests:",
-          publicTests
-        );
+          setTests(publicTests);
+        }
 
-        /*
-          Test Number के अनुसार sort
-        */
+        /* ==============================================
+           LOAD CURRENT USER ATTEMPTS
+        ============================================== */
 
-        publicTests.sort(
-          (a, b) => {
-            const aNo = Number(
-              a.testNumber ??
-                a.testNo ??
-                a.number ??
-                999999
+        const currentUser =
+          auth.currentUser;
+
+        if (
+          currentUser?.uid
+        ) {
+          try {
+            const attemptsSnapshot =
+              await get(
+                ref(
+                  db,
+                  `testAttempts/${currentUser.uid}`
+                )
+              );
+
+            if (
+              attemptsSnapshot.exists()
+            ) {
+              const attempts =
+                attemptsSnapshot.val() || {};
+
+              console.log(
+                "USER TEST ATTEMPTS:",
+                attempts
+              );
+
+              if (mounted) {
+                setAttemptedTests(
+                  attempts
+                );
+              }
+            } else {
+              if (mounted) {
+                setAttemptedTests({});
+              }
+            }
+          } catch (attemptError) {
+            console.error(
+              "ATTEMPTS LOAD ERROR:",
+              attemptError
             );
 
-            const bNo = Number(
-              b.testNumber ??
-                b.testNo ??
-                b.number ??
-                999999
-            );
+            /*
+              अगर attempts पढ़ने की permission
+              अभी Firebase Rules में नहीं है,
+              तो tests फिर भी दिखाई देंगे।
+            */
 
-            return aNo - bNo;
+            if (mounted) {
+              setAttemptedTests({});
+            }
           }
-        );
-
-        setTests(
-          publicTests
-        );
+        } else {
+          setAttemptedTests({});
+        }
       } catch (err) {
         console.error(
           "TEST SERIES LOAD ERROR:",
@@ -314,12 +339,12 @@ export default function TestSeries({
   }, []);
 
   /* ====================================================
-     START TEST
+     START / RE-ATTEMPT TEST
   ==================================================== */
 
-  const handleStart = (test) => {
+  const handleStart = async (test) => {
     console.log(
-      "START TEST:",
+      "START / RE-ATTEMPT TEST:",
       test
     );
 
@@ -331,12 +356,109 @@ export default function TestSeries({
       return;
     }
 
+    const currentUser =
+      auth.currentUser;
+
+    /*
+      Test ID को हमेशा stable रखें।
+    */
+
+    const testId =
+      String(
+        test.id ||
+        test.testId ||
+        `${test.exam || "general"}_test_${
+          test.testNumber ??
+          test.testNo ??
+          test.number ??
+          1
+        }`
+      );
+
+    /* ==============================================
+       USER ATTEMPT SAVE
+    ============================================== */
+
+    if (currentUser?.uid) {
+      try {
+        await set(
+          ref(
+            db,
+            `testAttempts/${currentUser.uid}/${testId}`
+          ),
+          {
+            testId,
+            title:
+              test.title ||
+              test.name ||
+              "Test",
+
+            exam:
+              test.exam ||
+              test.examName ||
+              "",
+
+            testNumber:
+              test.testNumber ??
+              test.testNo ??
+              test.number ??
+              1,
+
+            attemptedAt:
+              Date.now(),
+
+            attempted: true,
+          }
+        );
+
+        /*
+          UI तुरंत Re-attempt दिखाए
+        */
+
+        setAttemptedTests(
+          (prev) => ({
+            ...prev,
+
+            [testId]: {
+              testId,
+              attempted: true,
+              attemptedAt:
+                Date.now(),
+            },
+          })
+        );
+
+        console.log(
+          "TEST ATTEMPT SAVED:",
+          testId
+        );
+      } catch (attemptError) {
+        console.error(
+          "TEST ATTEMPT SAVE ERROR:",
+          attemptError
+        );
+
+        /*
+          Test शुरू होने से न रोकें।
+          अगर Rules में testAttempts की
+          permission अभी नहीं है तो भी
+          Test open होगा।
+        */
+      }
+    }
+
+    /* ==============================================
+       OPEN TEST
+    ============================================== */
+
     if (
       typeof onStartTest ===
       "function"
     ) {
       onStartTest({
         id: test.id,
+
+        testId,
 
         title:
           test.title ||
@@ -360,7 +482,8 @@ export default function TestSeries({
         questions:
           test.questions || [],
 
-        raw: test.raw || test,
+        raw:
+          test.raw || test,
       });
     } else {
       console.error(
@@ -652,6 +775,23 @@ export default function TestSeries({
               test.number ??
               index + 1;
 
+            /*
+              वही ID जिससे Firebase में
+              attempt save हुआ है।
+            */
+
+            const testId =
+              String(
+                test.id ||
+                test.testId ||
+                `${test.exam || "general"}_test_${testNumber}`
+              );
+
+            const hasAttempted =
+              Boolean(
+                attemptedTests?.[testId]
+              );
+
             return (
               <div
                 key={
@@ -794,7 +934,7 @@ export default function TestSeries({
                   PUBLIC
                 </div>
 
-                {/* START BUTTON */}
+                {/* START / RE-ATTEMPT BUTTON */}
 
                 <button
                   type="button"
@@ -832,7 +972,9 @@ export default function TestSeries({
                       "pointer",
                   }}
                 >
-                  ▶️ Test Start करें
+                  {hasAttempted
+                    ? "🔄 Re-attempt"
+                    : "▶️ Test Start करें"}
                 </button>
               </div>
             );
