@@ -1,8 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 // ======================================================
 // LOCAL QUESTION FOLDERS — FALLBACK
@@ -23,10 +19,6 @@ const EXAM_FOLDERS = {
   teaching: "teaching",
 };
 
-// ======================================================
-// LOCAL TEST MODULES
-// ======================================================
-
 const TEST_MODULES = import.meta.glob(
   "../data/questions/*/test*.js",
   {
@@ -38,13 +30,9 @@ const TEST_MODULES = import.meta.glob(
 // LOCAL QUESTIONS
 // ======================================================
 
-function getLocalQuestions(
-  examId,
-  testNumber
-) {
+function getLocalQuestions(examId, testNumber) {
   const folder =
-    EXAM_FOLDERS[examId] ||
-    examId;
+    EXAM_FOLDERS[examId] || examId;
 
   const number = String(
     testNumber ?? 1
@@ -53,8 +41,7 @@ function getLocalQuestions(
   const key =
     `../data/questions/${folder}/test${number}.js`;
 
-  const mod =
-    TEST_MODULES[key];
+  const mod = TEST_MODULES[key];
 
   return (
     mod?.default ||
@@ -66,6 +53,7 @@ function getLocalQuestions(
 
 // ======================================================
 // GET QUESTIONS
+// Firebase → Local fallback
 // ======================================================
 
 function getQuestions(test) {
@@ -74,22 +62,16 @@ function getQuestions(test) {
     Array.isArray(test?.questions) &&
     test.questions.length > 0
   ) {
-    return test.questions.slice(
-      0,
-      150
-    );
+    return test.questions.slice(0, 150);
   }
 
   // Firebase Object
   if (
     test?.questions &&
-    typeof test.questions ===
-      "object"
+    typeof test.questions === "object"
   ) {
     const firebaseQuestions =
-      Object.values(
-        test.questions
-      );
+      Object.values(test.questions);
 
     if (
       firebaseQuestions.length > 0
@@ -101,14 +83,10 @@ function getQuestions(test) {
     }
   }
 
-  // Local fallback
+  // Local JS fallback
   return getLocalQuestions(
-    test?.examId ||
-      test?.exam ||
-      test?.examName,
-    test?.testNumber ??
-      test?.testNo ??
-      test?.number
+    test?.examId,
+    test?.testNumber
   ).slice(0, 150);
 }
 
@@ -117,17 +95,14 @@ function getQuestions(test) {
 // ======================================================
 
 function getOptions(q) {
-  if (
-    Array.isArray(q?.options)
-  ) {
+  if (Array.isArray(q?.options)) {
     return q.options.map(
       (value, index) => ({
         key: String.fromCharCode(
           65 + index
         ),
         value:
-          typeof value ===
-          "object"
+          typeof value === "object"
             ? value?.value ??
               value?.text ??
               ""
@@ -138,8 +113,7 @@ function getOptions(q) {
 
   if (
     q?.options &&
-    typeof q.options ===
-      "object"
+    typeof q.options === "object"
   ) {
     return Object.entries(
       q.options
@@ -148,8 +122,7 @@ function getOptions(q) {
         key:
           String(key).toUpperCase(),
         value:
-          typeof value ===
-          "object"
+          typeof value === "object"
             ? value?.value ??
               value?.text ??
               ""
@@ -163,12 +136,10 @@ function getOptions(q) {
 }
 
 // ======================================================
-// NORMALIZE ANSWER
+// ANSWER NORMALIZATION
 // ======================================================
 
-function normalizeAnswer(
-  value
-) {
+function normalizeAnswer(value) {
   if (
     value === undefined ||
     value === null ||
@@ -177,33 +148,37 @@ function normalizeAnswer(
     return "";
   }
 
-  // Number
-  if (
-    typeof value === "number"
-  ) {
+  /*
+    IMPORTANT:
+    Number answer को सही तरीके से handle करें।
+    
+    0 = A
+    1 = B
+    2 = C
+    3 = D
+    
+    लेकिन अगर string "1" है तो
+    1 = A
+    2 = B
+    3 = C
+    4 = D
+  */
+
+  if (typeof value === "number") {
     if (
-      value >= 1 &&
-      value <= 4
+      value >= 0 &&
+      value <= 3
     ) {
       return String.fromCharCode(
-        64 + value
+        65 + value
       );
-    }
-
-    if (
-      value === 0
-    ) {
-      return "A";
     }
   }
 
   const text =
-    String(value)
-      .trim();
+    String(value).trim();
 
-  if (!text) {
-    return "";
-  }
+  if (!text) return "";
 
   // A / B / C / D
   const letter =
@@ -215,12 +190,9 @@ function normalizeAnswer(
     return letter[1].toUpperCase();
   }
 
-  // Number as string
-  if (
-    /^\d+$/.test(text)
-  ) {
-    const n =
-      Number(text);
+  // Number stored as string
+  if (/^\d+$/.test(text)) {
+    const n = Number(text);
 
     if (
       n >= 1 &&
@@ -232,9 +204,12 @@ function normalizeAnswer(
     }
 
     if (
-      n === 0
+      n >= 0 &&
+      n <= 3
     ) {
-      return "A";
+      return String.fromCharCode(
+        65 + n
+      );
     }
   }
 
@@ -244,7 +219,7 @@ function normalizeAnswer(
 }
 
 // ======================================================
-// GET ANSWER
+// GET CORRECT ANSWER
 // ======================================================
 
 function getAnswer(q) {
@@ -254,74 +229,12 @@ function getAnswer(q) {
     q?.correct ??
     q?.correctOption ??
     q?.rightAnswer ??
-    q?.right ??
     ""
   );
 }
 
 // ======================================================
-// GET EXPLANATION
-// ======================================================
-
-function getExplanation(q) {
-  return (
-    q?.explanation ??
-    q?.व्याख्या ??
-    q?.explanationText ??
-    q?.solution ??
-    q?.details ??
-    "इस प्रश्न की व्याख्या उपलब्ध नहीं है।"
-  );
-}
-
-// ======================================================
-// GET IMPORTANT FACTS
-// ======================================================
-
-function getImportantFacts(q) {
-  if (
-    Array.isArray(
-      q?.importantFacts
-    )
-  ) {
-    return q.importantFacts;
-  }
-
-  if (
-    Array.isArray(
-      q?.महत्वपूर्णतथ्य
-    )
-  ) {
-    return q.महत्वपूर्णतथ्य;
-  }
-
-  if (
-    Array.isArray(
-      q?.important_facts
-    )
-  ) {
-    return q.important_facts;
-  }
-
-  return [];
-}
-
-// ======================================================
-// GET EXAM TRICK
-// ======================================================
-
-function getExamTrick(q) {
-  return (
-    q?.examTrick ??
-    q?.exam_trick ??
-    q?.ExamTrick ??
-    q?.परीक्षाट्रिक ??
-    ""
-  );
-}
-
-// ======================================================
-// CORRECT CHECK
+// CHECK ANSWER
 // ======================================================
 
 function isCorrect(
@@ -334,9 +247,7 @@ function isCorrect(
     );
 
   const userAnswer =
-    normalizeAnswer(
-      selected
-    );
+    normalizeAnswer(selected);
 
   if (
     !correct ||
@@ -394,20 +305,56 @@ function isCorrect(
 }
 
 // ======================================================
-// STORAGE KEY
+// GET EXPLANATION
 // ======================================================
 
-function getStorageKey(test) {
-  const id =
-    test?.id ||
-    `${test?.examId || test?.exam || "exam"}_${
-      test?.testNumber ??
-      test?.testNo ??
-      test?.number ??
-      1
-    }`;
+function getExplanation(q) {
+  return (
+    q?.explanation ??
+    q?.व्याख्या ??
+    q?.explanationText ??
+    q?.solution ??
+    q?.details ??
+    "इस प्रश्न की व्याख्या उपलब्ध नहीं है।"
+  );
+}
 
-  return `study_with_power_test_${id}`;
+// ======================================================
+// GET IMPORTANT FACTS
+// ======================================================
+
+function getImportantFacts(q) {
+  if (
+    Array.isArray(
+      q?.importantFacts
+    )
+  ) {
+    return q.importantFacts;
+  }
+
+  if (
+    Array.isArray(
+      q?.महत्वपूर्णतथ्य
+    )
+  ) {
+    return q.महत्वपूर्णतथ्य;
+  }
+
+  return [];
+}
+
+// ======================================================
+// GET EXAM TRICK
+// ======================================================
+
+function getExamTrick(q) {
+  return (
+    q?.examTrick ??
+    q?.exam_trick ??
+    q?.ExamTrick ??
+    q?.परीक्षाट्रिक ??
+    ""
+  );
 }
 
 // ======================================================
@@ -422,25 +369,11 @@ export default function TestRunner({
   // QUESTIONS
   // ====================================================
 
-  const questions =
-    useMemo(
-      () =>
-        getQuestions(test),
-      [test]
-    );
-
-  // ====================================================
-  // DURATION
-  // ====================================================
-
-  const durationMinutes =
-    Number(
-      test?.durationMinutes ??
-        test?.duration ??
-        test?.timeLimit ??
-        test?.time ??
-        30
-    );
+  const questions = useMemo(
+    () =>
+      getQuestions(test),
+    [test]
+  );
 
   // ====================================================
   // STATE
@@ -456,15 +389,25 @@ export default function TestRunner({
     useState(false);
 
   /*
-    Re-attempt / Review Mode
+    IMPORTANT
 
-    true =
-    पिछली attempt के answers,
-    सही answer और explanation दिखेंगे
+    false = पहली बार Test
+
+    true = Re-attempt
+
+    Re-attempt में option click करते ही
+    सही answer + explanation दिखेगी।
   */
 
-  const [reviewMode, setReviewMode] =
+  const [isReAttempt, setIsReAttempt] =
     useState(false);
+
+  const durationMinutes =
+    Number(
+      test?.durationMinutes ??
+        test?.duration ??
+        30
+    );
 
   const [timeLeft, setTimeLeft] =
     useState(
@@ -472,60 +415,23 @@ export default function TestRunner({
     );
 
   // ====================================================
-  // LOAD PREVIOUS ATTEMPT
+  // RESET WHEN NEW TEST OPENS
   // ====================================================
 
   useEffect(() => {
-    if (!test) return;
+    setCurrent(0);
+    setAnswers({});
+    setFinished(false);
+    setIsReAttempt(false);
 
-    const key =
-      getStorageKey(test);
+    setTimeLeft(
+      durationMinutes * 60
+    );
 
-    try {
-      const saved =
-        localStorage.getItem(key);
-
-      if (!saved) {
-        setAnswers({});
-        setFinished(false);
-        setReviewMode(false);
-        setCurrent(0);
-        setTimeLeft(
-          durationMinutes * 60
-        );
-        return;
-      }
-
-      const data =
-        JSON.parse(saved);
-
-      if (
-        data &&
-        data.answers
-      ) {
-        setAnswers(
-          data.answers
-        );
-      }
-
-      /*
-        Previous result मौजूद है,
-        इसलिए Test List से खोलने पर
-        नया test शुरू होगा।
-      */
-
-      setFinished(false);
-      setReviewMode(false);
-      setCurrent(0);
-      setTimeLeft(
-        durationMinutes * 60
-      );
-    } catch (error) {
-      console.error(
-        "Previous test load error:",
-        error
-      );
-    }
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }, [
     test?.id,
     test?.examId,
@@ -540,7 +446,6 @@ export default function TestRunner({
   useEffect(() => {
     if (
       finished ||
-      reviewMode ||
       !questions.length
     ) {
       return;
@@ -571,7 +476,6 @@ export default function TestRunner({
       clearInterval(timer);
   }, [
     finished,
-    reviewMode,
     questions.length,
   ]);
 
@@ -651,33 +555,6 @@ export default function TestRunner({
     ]);
 
   // ====================================================
-  // SAVE RESULT
-  // ====================================================
-
-  const saveAttempt =
-    () => {
-      try {
-        const key =
-          getStorageKey(test);
-
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            answers,
-            scoreData,
-            completedAt:
-              new Date().toISOString(),
-          })
-        );
-      } catch (error) {
-        console.error(
-          "Attempt save error:",
-          error
-        );
-      }
-    };
-
-  // ====================================================
   // SELECT ANSWER
   // ====================================================
 
@@ -694,6 +571,20 @@ export default function TestRunner({
         [current]: value,
       })
     );
+
+    /*
+      Re-attempt में answer select करने के बाद
+      उसी question पर answer + explanation दिखेगी।
+    */
+
+    if (isReAttempt) {
+      setTimeout(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }, 50);
+    }
   };
 
   // ====================================================
@@ -701,54 +592,38 @@ export default function TestRunner({
   // ====================================================
 
   const submitTest = () => {
-    const ok =
+    if (
       window.confirm(
         "क्या आप Test Submit करना चाहते हैं?"
-      );
+      )
+    ) {
+      setFinished(true);
 
-    if (!ok) {
-      return;
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
     }
-
-    saveAttempt();
-
-    setFinished(true);
-
-    setReviewMode(false);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
   };
 
   // ====================================================
-  // RE-ATTEMPT / REVIEW
+  // RESTART / RE-ATTEMPT
   // ====================================================
 
   const restartTest = () => {
     /*
-      IMPORTANT:
+      सबसे महत्वपूर्ण बदलाव:
 
-      Answers को delete नहीं किया जा रहा।
-
-      इसलिए:
-      - आपका पुराना answer रहेगा
-      - सही answer दिखाई देगा
-      - explanation दिखाई देगी
-      - important facts दिखाई देंगे
-      - exam trick दिखाई देगी
+      Re-attempt mode ON
     */
 
-    setFinished(false);
-
-    setReviewMode(true);
+    setIsReAttempt(true);
 
     setCurrent(0);
 
-    /*
-      Review mode में timer नहीं चलेगा
-    */
+    setAnswers({});
+
+    setFinished(false);
 
     setTimeLeft(
       durationMinutes * 60
@@ -759,39 +634,6 @@ export default function TestRunner({
       behavior: "smooth",
     });
   };
-
-  // ====================================================
-  // FRESH ATTEMPT
-  // ====================================================
-
-  const startFreshAttempt =
-    () => {
-      const ok =
-        window.confirm(
-          "क्या आप बिना पुराने उत्तर के नया Attempt शुरू करना चाहते हैं?"
-        );
-
-      if (!ok) {
-        return;
-      }
-
-      setAnswers({});
-
-      setCurrent(0);
-
-      setFinished(false);
-
-      setReviewMode(false);
-
-      setTimeLeft(
-        durationMinutes * 60
-      );
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    };
 
   // ====================================================
   // TIMER FORMAT
@@ -823,12 +665,9 @@ export default function TestRunner({
     !questions.length
   ) {
     return (
-      <main
-        className="ai-container"
-      >
-        <div
-          className="ai-card"
-        >
+      <main className="ai-container">
+        <div className="ai-card">
+
           <h2>
             📚{" "}
             {test?.examTitle ||
@@ -865,6 +704,7 @@ export default function TestRunner({
           >
             ← वापस जाएँ
           </button>
+
         </div>
       </main>
     );
@@ -876,12 +716,9 @@ export default function TestRunner({
 
   if (finished) {
     return (
-      <main
-        className="ai-container"
-      >
-        <div
-          className="ai-card"
-        >
+      <main className="ai-container">
+
+        <div className="ai-card">
 
           {/* RESULT HEADER */}
 
@@ -893,6 +730,7 @@ export default function TestRunner({
                 "10px 5px 25px",
             }}
           >
+
             <div
               style={{
                 fontSize: 55,
@@ -901,7 +739,12 @@ export default function TestRunner({
               🏆
             </div>
 
-            <h1>
+            <h1
+              style={{
+                margin:
+                  "8px 0",
+              }}
+            >
               Test Result
             </h1>
 
@@ -957,6 +800,7 @@ export default function TestRunner({
                 %
               </strong>
             </p>
+
           </div>
 
           {/* SUMMARY */}
@@ -972,6 +816,7 @@ export default function TestRunner({
                 "20px 0",
             }}
           >
+
             <div
               style={{
                 padding: 18,
@@ -1046,16 +891,18 @@ export default function TestRunner({
                 }
               </div>
             </div>
+
           </div>
 
-          {/* ANSWER EXPLANATION */}
+          {/* EXPLANATION */}
 
           <h2>
-            📖 उत्तर एवं व्याख्या
+            📖 प्रश्नों की व्याख्या
           </h2>
 
           {questions.map(
             (q, i) => {
+
               const options =
                 getOptions(q);
 
@@ -1074,8 +921,7 @@ export default function TestRunner({
                   (option) =>
                     normalizeAnswer(
                       option.key
-                    ) ===
-                    selected
+                    ) === selected
                 );
 
               const correctOption =
@@ -1083,17 +929,14 @@ export default function TestRunner({
                   (option) =>
                     normalizeAnswer(
                       option.key
-                    ) ===
-                    correct
+                    ) === correct
                 );
 
               const explanation =
                 getExplanation(q);
 
               const importantFacts =
-                getImportantFacts(
-                  q
-                );
+                getImportantFacts(q);
 
               const examTrick =
                 getExamTrick(q);
@@ -1119,6 +962,7 @@ export default function TestRunner({
                       "#fff",
                   }}
                 >
+
                   <h3
                     style={{
                       marginTop: 0,
@@ -1150,25 +994,18 @@ export default function TestRunner({
 
                   <div
                     style={{
-                      marginTop: 8,
-                      padding:
-                        "10px 12px",
-                      borderRadius: 10,
-                      background:
-                        "#ecfdf5",
+                      marginTop: 6,
                       color:
                         "#15803d",
                     }}
                   >
                     <strong>
-                      ✅ सही उत्तर:
+                      सही उत्तर:
                     </strong>{" "}
 
                     {correctOption
                       ? `${correctOption.key}) ${correctOption.value}`
-                      : getAnswer(
-                          q
-                        ) ||
+                      : getAnswer(q) ||
                         "उपलब्ध नहीं"}
                   </div>
 
@@ -1184,8 +1021,8 @@ export default function TestRunner({
                     undefined
                       ? "⚪ अनुत्तरित"
                       : correctAnswer
-                      ? "✅ आपका उत्तर सही है"
-                      : "❌ आपका उत्तर गलत है"}
+                      ? "✅ सही उत्तर"
+                      : "❌ गलत उत्तर"}
                   </div>
 
                   {/* EXPLANATION */}
@@ -1202,6 +1039,7 @@ export default function TestRunner({
                       lineHeight: 1.75,
                     }}
                   >
+
                     <div>
                       💡{" "}
                       <strong>
@@ -1216,6 +1054,7 @@ export default function TestRunner({
                     >
                       {explanation}
                     </div>
+
                   </div>
 
                   {/* IMPORTANT FACTS */}
@@ -1234,6 +1073,7 @@ export default function TestRunner({
                         lineHeight: 1.8,
                       }}
                     >
+
                       <div
                         style={{
                           fontWeight: 900,
@@ -1258,12 +1098,16 @@ export default function TestRunner({
                               key={
                                 factIndex
                               }
+                              style={{
+                                marginBottom: 4,
+                              }}
                             >
                               {fact}
                             </li>
                           )
                         )}
                       </ul>
+
                     </div>
                   )}
 
@@ -1283,20 +1127,25 @@ export default function TestRunner({
                         fontWeight: 700,
                       }}
                     >
-                      🧠{" "}
-                      <strong>
-                        Exam Trick:
-                      </strong>
 
                       <div
                         style={{
-                          marginTop: 6,
+                          marginBottom: 6,
                         }}
                       >
+                        🧠{" "}
+                        <strong>
+                          Exam Trick:
+                        </strong>
+                      </div>
+
+                      <div>
                         {examTrick}
                       </div>
+
                     </div>
                   )}
+
                 </div>
               );
             }
@@ -1316,6 +1165,7 @@ export default function TestRunner({
               marginTop: 25,
             }}
           >
+
             <button
               type="button"
               className="ai-button"
@@ -1323,18 +1173,7 @@ export default function TestRunner({
                 restartTest
               }
             >
-              🔄 Re-attempt करें
-              / उत्तर देखें
-            </button>
-
-            <button
-              type="button"
-              className="ai-button"
-              onClick={
-                startFreshAttempt
-              }
-            >
-              🆕 नया Attempt
+              🔄 Test दोबारा दें
             </button>
 
             <button
@@ -1344,7 +1183,9 @@ export default function TestRunner({
             >
               ← Test List
             </button>
+
           </div>
+
         </div>
       </main>
     );
@@ -1365,46 +1206,58 @@ export default function TestRunner({
       answers[current]
     );
 
-  const correctAnswer =
+  // ====================================================
+  // RE-ATTEMPT ANSWER DATA
+  // ====================================================
+
+  const currentCorrect =
     normalizeAnswer(
       getAnswer(question)
     );
 
-  const correctOption =
+  const currentCorrectOption =
     options.find(
       (option) =>
         normalizeAnswer(
           option.key
-        ) ===
-        correctAnswer
+        ) === currentCorrect
     );
 
-  const explanation =
-    getExplanation(
-      question
+  const currentSelectedOption =
+    options.find(
+      (option) =>
+        normalizeAnswer(
+          option.key
+        ) === selected
     );
 
-  const importantFacts =
+  const currentIsCorrect =
+    selected
+      ? isCorrect(
+          question,
+          selected
+        )
+      : false;
+
+  const currentExplanation =
+    getExplanation(question);
+
+  const currentImportantFacts =
     getImportantFacts(
       question
     );
 
-  const examTrick =
-    getExamTrick(
-      question
-    );
+  const currentExamTrick =
+    getExamTrick(question);
 
   // ====================================================
   // TEST PAGE
   // ====================================================
 
   return (
-    <main
-      className="ai-container"
-    >
-      <div
-        className="ai-card"
-      >
+    <main className="ai-container">
+
+      <div className="ai-card">
 
         {/* BACK */}
 
@@ -1416,35 +1269,27 @@ export default function TestRunner({
           ← Test Series
         </button>
 
-        {/* REVIEW MODE NOTICE */}
+        {/* RE-ATTEMPT NOTICE */}
 
-        {reviewMode && (
+        {isReAttempt && (
           <div
             style={{
               marginTop: 15,
-              padding: 15,
-              borderRadius: 12,
+              padding:
+                "10px 14px",
+              borderRadius:
+                10,
               background:
                 "#fff7ed",
               border:
                 "1px solid #fed7aa",
               color:
-                "#9a3412",
+                "#c2410c",
               fontWeight: 800,
-              lineHeight: 1.6,
             }}
           >
-            📖{" "}
-            <strong>
-              Re-attempt / Review Mode
-            </strong>
-
-            <br />
-
-            आपके पिछले उत्तर,
-            सही उत्तर और
-            व्याख्या नीचे दिखाई
-            जाएगी।
+            🔄 Re-attempt Mode — Option चुनते ही
+            सही उत्तर और व्याख्या दिखाई जाएगी।
           </div>
         )}
 
@@ -1464,7 +1309,9 @@ export default function TestRunner({
             marginTop: 18,
           }}
         >
+
           <div>
+
             <h1
               style={{
                 marginBottom: 6,
@@ -1473,7 +1320,6 @@ export default function TestRunner({
               🎯{" "}
               {test?.examTitle ||
                 test?.examName ||
-                test?.exam ||
                 ""}
             </h1>
 
@@ -1485,31 +1331,29 @@ export default function TestRunner({
               {test?.title ||
                 "Test"}
             </h2>
+
           </div>
 
           {/* TIMER */}
 
-          {!reviewMode && (
-            <div
-              style={{
-                fontSize: 28,
-                fontWeight: 900,
-                color:
-                  timeLeft <=
-                  60
-                    ? "#dc2626"
-                    : timeLeft <=
-                      300
-                    ? "#ea580c"
-                    : "#0f172a",
-              }}
-            >
-              ⏱️{" "}
-              {formatTime(
-                timeLeft
-              )}
-            </div>
-          )}
+          <div
+            style={{
+              fontSize: 28,
+              fontWeight: 900,
+              color:
+                timeLeft <= 60
+                  ? "#dc2626"
+                  : timeLeft <= 300
+                  ? "#ea580c"
+                  : "#0f172a",
+            }}
+          >
+            ⏱️{" "}
+            {formatTime(
+              timeLeft
+            )}
+          </div>
+
         </div>
 
         {/* QUESTION AREA */}
@@ -1539,6 +1383,7 @@ export default function TestRunner({
                 "wrap",
             }}
           >
+
             <strong>
               प्रश्न{" "}
               {current + 1} /{" "}
@@ -1553,6 +1398,7 @@ export default function TestRunner({
                 ).length
               }
             </strong>
+
           </div>
 
           {/* PROGRESS */}
@@ -1572,6 +1418,7 @@ export default function TestRunner({
               marginBottom: 20,
             }}
           >
+
             <div
               style={{
                 width:
@@ -1588,6 +1435,7 @@ export default function TestRunner({
                   "width 0.2s ease",
               }}
             />
+
           </div>
 
           {/* QUESTION */}
@@ -1613,20 +1461,64 @@ export default function TestRunner({
               marginTop: 18,
             }}
           >
+
             {options.map(
               (option) => {
+
                 const active =
                   selected ===
                   normalizeAnswer(
                     option.key
                   );
 
-                const isRight =
-                  reviewMode &&
+                const isCorrectOption =
                   normalizeAnswer(
                     option.key
                   ) ===
-                    correctAnswer;
+                  currentCorrect;
+
+                /*
+                  Re-attempt में:
+                  
+                  सही option = green
+                  
+                  user ने गलत option चुना =
+                  red
+                */
+
+                let border =
+                  active
+                    ? "2px solid #2563eb"
+                    : "1px solid #cbd5e1";
+
+                let background =
+                  active
+                    ? "#eff6ff"
+                    : "#ffffff";
+
+                if (
+                  isReAttempt &&
+                  selected
+                ) {
+                  if (
+                    isCorrectOption
+                  ) {
+                    border =
+                      "2px solid #16a34a";
+
+                    background =
+                      "#dcfce7";
+                  } else if (
+                    active &&
+                    !isCorrectOption
+                  ) {
+                    border =
+                      "2px solid #dc2626";
+
+                    background =
+                      "#fee2e2";
+                  }
+                }
 
                 return (
                   <button
@@ -1652,40 +1544,23 @@ export default function TestRunner({
                       padding: 16,
                       borderRadius:
                         12,
-
-                      border:
-                        isRight
-                          ? "3px solid #16a34a"
-                          : active
-                          ? "2px solid #2563eb"
-                          : "1px solid #cbd5e1",
-
-                      background:
-                        isRight
-                          ? "#dcfce7"
-                          : active
-                          ? "#eff6ff"
-                          : "#fff",
-
+                      border,
+                      background,
                       color:
                         "#111827",
-
                       cursor:
                         "pointer",
-
                       fontSize:
                         17,
-
                       lineHeight:
                         1.5,
-
                       boxSizing:
                         "border-box",
-
                       overflowWrap:
                         "anywhere",
                     }}
                   >
+
                     <strong
                       style={{
                         minWidth: 28,
@@ -1706,223 +1581,276 @@ export default function TestRunner({
                       {
                         option.value
                       }
+                    </span>
 
-                      {isRight && (
+                    {/* RE-ATTEMPT ICON */}
+
+                    {isReAttempt &&
+                      selected &&
+                      isCorrectOption && (
                         <span
                           style={{
-                            marginLeft: 8,
-                            color:
-                              "#15803d",
                             fontWeight:
                               900,
+                            color:
+                              "#15803d",
+                            fontSize:
+                              20,
                           }}
                         >
-                          ✅ सही उत्तर
+                          ✓
                         </span>
                       )}
-                    </span>
+
+                    {isReAttempt &&
+                      selected &&
+                      active &&
+                      !isCorrectOption && (
+                        <span
+                          style={{
+                            fontWeight:
+                              900,
+                            color:
+                              "#dc2626",
+                            fontSize:
+                              20,
+                          }}
+                        >
+                          ✕
+                        </span>
+                      )}
+
                   </button>
                 );
               }
             )}
+
           </div>
 
           {/* ==================================================
-              REVIEW MODE — ANSWER + EXPLANATION
+              RE-ATTEMPT ANSWER + EXPLANATION
           ================================================== */}
 
-          {reviewMode && (
-            <div
-              style={{
-                marginTop: 20,
-              }}
-            >
-
-              {/* CORRECT ANSWER */}
-
+          {isReAttempt &&
+            selected && (
               <div
                 style={{
-                  padding: 15,
-                  borderRadius: 12,
-                  background:
-                    "#ecfdf5",
-                  border:
-                    "1px solid #86efac",
-                  color:
-                    "#166534",
-                  lineHeight: 1.7,
+                  marginTop: 22,
                 }}
               >
-                <strong>
-                  ✅ सही उत्तर:
-                </strong>{" "}
 
-                {correctOption
-                  ? `${correctOption.key}) ${correctOption.value}`
-                  : getAnswer(
-                      question
-                    ) ||
-                    "उपलब्ध नहीं"}
-              </div>
-
-              {/* YOUR ANSWER */}
-
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 15,
-                  borderRadius: 12,
-                  background:
-                    isCorrect(
-                      question,
-                      answers[current]
-                    )
-                      ? "#ecfdf5"
-                      : "#fef2f2",
-                  border:
-                    isCorrect(
-                      question,
-                      answers[current]
-                    )
-                      ? "1px solid #86efac"
-                      : "1px solid #fecaca",
-                  lineHeight: 1.7,
-                }}
-              >
-                <strong>
-                  आपका उत्तर:
-                </strong>{" "}
-
-                {selected
-                  ? options.find(
-                      (option) =>
-                        normalizeAnswer(
-                          option.key
-                        ) ===
-                        selected
-                    )?.value ||
-                    selected
-                  : "नहीं दिया"}
+                {/* RESULT */}
 
                 <div
                   style={{
-                    marginTop: 5,
+                    padding: 15,
+                    borderRadius: 12,
+                    background:
+                      currentIsCorrect
+                        ? "#dcfce7"
+                        : "#fee2e2",
+                    border:
+                      currentIsCorrect
+                        ? "1px solid #86efac"
+                        : "1px solid #fca5a5",
+                    color:
+                      currentIsCorrect
+                        ? "#166534"
+                        : "#991b1b",
                     fontWeight: 900,
+                    fontSize: 17,
                   }}
                 >
-                  {selected
-                    ? isCorrect(
-                        question,
-                        answers[current]
-                      )
-                      ? "✅ आपका उत्तर सही है"
-                      : "❌ आपका उत्तर गलत है"
-                    : "⚪ आपने उत्तर नहीं दिया"}
-                </div>
-              </div>
-
-              {/* EXPLANATION */}
-
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 16,
-                  borderRadius: 12,
-                  background:
-                    "#fff8e5",
-                  border:
-                    "1px solid #f1d58a",
-                  lineHeight: 1.8,
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 900,
-                    marginBottom: 7,
-                  }}
-                >
-                  💡 व्याख्या
+                  {currentIsCorrect
+                    ? "✅ आपका उत्तर सही है"
+                    : "❌ आपका उत्तर गलत है"}
                 </div>
 
-                <div>
-                  {explanation}
-                </div>
-              </div>
+                {/* USER ANSWER */}
 
-              {/* IMPORTANT FACTS */}
-
-              {importantFacts.length >
-                0 && (
                 <div
                   style={{
                     marginTop: 12,
-                    padding: 16,
+                    padding: 15,
                     borderRadius: 12,
                     background:
                       "#f8fafc",
                     border:
                       "1px solid #cbd5e1",
-                    lineHeight: 1.8,
                   }}
                 >
+
                   <strong>
-                    📌 महत्वपूर्ण तथ्य:
-                  </strong>
+                    आपका उत्तर:
+                  </strong>{" "}
 
-                  <ul
-                    style={{
-                      marginTop: 8,
-                    }}
-                  >
-                    {importantFacts.map(
-                      (
-                        fact,
-                        index
-                      ) => (
-                        <li
-                          key={
-                            index
-                          }
-                        >
-                          {fact}
-                        </li>
-                      )
-                    )}
-                  </ul>
+                  {currentSelectedOption
+                    ? `${currentSelectedOption.key}) ${currentSelectedOption.value}`
+                    : "नहीं दिया"}
+
                 </div>
-              )}
 
-              {/* EXAM TRICK */}
+                {/* CORRECT ANSWER */}
 
-              {examTrick && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 15,
+                    borderRadius: 12,
+                    background:
+                      "#ecfdf5",
+                    border:
+                      "1px solid #86efac",
+                    color:
+                      "#166534",
+                  }}
+                >
+
+                  <strong>
+                    ✅ सही उत्तर:
+                  </strong>{" "}
+
+                  {currentCorrectOption
+                    ? `${currentCorrectOption.key}) ${currentCorrectOption.value}`
+                    : getAnswer(
+                        question
+                      ) ||
+                      "उपलब्ध नहीं"}
+
+                </div>
+
+                {/* EXPLANATION */}
+
                 <div
                   style={{
                     marginTop: 12,
                     padding: 16,
                     borderRadius: 12,
                     background:
-                      "#eef2ff",
+                      "#fff8e5",
                     border:
-                      "1px solid #c7d2fe",
-                    lineHeight: 1.8,
+                      "1px solid #f1d58a",
+                    lineHeight:
+                      1.75,
                   }}
                 >
-                  🧠{" "}
-                  <strong>
-                    Exam Trick:
-                  </strong>
 
                   <div
                     style={{
-                      marginTop: 6,
+                      fontWeight:
+                        900,
+                      marginBottom:
+                        7,
+                      fontSize:
+                        17,
                     }}
                   >
-                    {examTrick}
+                    💡 व्याख्या
                   </div>
+
+                  <div>
+                    {
+                      currentExplanation
+                    }
+                  </div>
+
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* IMPORTANT FACTS */}
+
+                {currentImportantFacts.length >
+                  0 && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 16,
+                      borderRadius: 12,
+                      background:
+                        "#f8fafc",
+                      border:
+                        "1px solid #cbd5e1",
+                      lineHeight:
+                        1.8,
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontWeight:
+                          900,
+                        marginBottom:
+                          8,
+                      }}
+                    >
+                      📌 महत्वपूर्ण तथ्य
+                    </div>
+
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft:
+                          24,
+                      }}
+                    >
+                      {currentImportantFacts.map(
+                        (
+                          fact,
+                          index
+                        ) => (
+                          <li
+                            key={
+                              index
+                            }
+                          >
+                            {fact}
+                          </li>
+                        )
+                      )}
+                    </ul>
+
+                  </div>
+                )}
+
+                {/* EXAM TRICK */}
+
+                {currentExamTrick && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 16,
+                      borderRadius: 12,
+                      background:
+                        "#eef2ff",
+                      border:
+                        "1px solid #c7d2fe",
+                      lineHeight:
+                        1.8,
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontWeight:
+                          900,
+                        marginBottom:
+                          7,
+                      }}
+                    >
+                      🧠 Exam Trick
+                    </div>
+
+                    <div>
+                      {
+                        currentExamTrick
+                      }
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+            )}
+
         </div>
 
         {/* NAVIGATION */}
@@ -1939,7 +1867,6 @@ export default function TestRunner({
             marginTop: 20,
           }}
         >
-          {/* PREVIOUS */}
 
           <button
             type="button"
@@ -1960,11 +1887,10 @@ export default function TestRunner({
             ← पिछला
           </button>
 
-          {/* NEXT / SUBMIT */}
-
           {current <
           questions.length -
             1 ? (
+
             <button
               type="button"
               className="ai-button"
@@ -1981,17 +1907,9 @@ export default function TestRunner({
             >
               अगला →
             </button>
-          ) : reviewMode ? (
-            <button
-              type="button"
-              className="ai-button"
-              onClick={
-                onBack
-              }
-            >
-              ← Test List
-            </button>
+
           ) : (
+
             <button
               type="button"
               className="ai-button"
@@ -2001,10 +1919,13 @@ export default function TestRunner({
             >
               ✅ Test Submit करें
             </button>
+
           )}
+
         </div>
 
       </div>
+
     </main>
   );
 }
