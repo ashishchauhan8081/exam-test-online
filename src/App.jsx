@@ -33,6 +33,8 @@ import firebaseConfig from "./firebase-config.json";
 import AdminPanel from "./components/AdminPanel";
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
+import TestSeries from "./pages/TestSeries";
+import TestRunner from "./components/TestRunner";
 
 /* ======================================================
    FIREBASE
@@ -2204,6 +2206,11 @@ export default function App() {
   ] = useState("home");
 
   const [
+    selectedTest,
+    setSelectedTest,
+  ] = useState(null);
+
+  const [
     authPage,
     setAuthPage,
   ] = useState(null);
@@ -2462,6 +2469,52 @@ export default function App() {
         );
       }
     };
+
+  /* ====================================================
+     TEST SERIES -> TEST RUNNER
+  ==================================================== */
+
+  const handleStartTest = (test) => {
+    const raw = test?.raw || {};
+
+    const normalizedTest = {
+      ...raw,
+      id: test?.id || raw?.id,
+      title: test?.title || raw?.title || "Test",
+      exam: test?.exam || raw?.exam || raw?.examName || "",
+      examId:
+        raw?.examId ||
+        raw?.exam ||
+        test?.exam ||
+        "",
+      testNumber:
+        raw?.testNumber ??
+        test?.testNo ??
+        1,
+      durationMinutes:
+        raw?.durationMinutes ??
+        raw?.duration ??
+        test?.duration ??
+        30,
+      questions:
+        raw?.questions ??
+        [],
+    };
+
+    console.log("OPENING TEST RUNNER:", normalizedTest);
+
+    setSelectedTest(normalizedTest);
+    setScreen("test-runner");
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  const handleBackFromTest = () => {
+    setSelectedTest(null);
+    setScreen("tests");
+  };
 
   /* ====================================================
      NAVIGATION PROTECTION
@@ -2805,11 +2858,47 @@ export default function App() {
       ) {
 
         return (
-          <TestsPage
+          <TestSeries
             onBack={() =>
               setScreen(
                 "home"
               )
+            }
+            onStartTest={
+              handleStartTest
+            }
+          />
+        );
+      }
+
+      /* ================================================
+         TEST RUNNER
+      ================================================ */
+
+      if (
+        screen === "test-runner"
+      ) {
+
+        if (!selectedTest) {
+          return (
+            <TestSeries
+              onBack={() =>
+                setScreen(
+                  "home"
+                )
+              }
+              onStartTest={
+                handleStartTest
+              }
+            />
+          );
+        }
+
+        return (
+          <TestRunner
+            test={selectedTest}
+            onBack={
+              handleBackFromTest
             }
           />
         );
@@ -2863,6 +2952,7 @@ export default function App() {
       firebaseUser,
       userData,
       isAdmin,
+      selectedTest,
     ]);
 
   /* ====================================================
