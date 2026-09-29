@@ -19,6 +19,10 @@ const EXAM_FOLDERS = {
   teaching: "teaching",
 };
 
+// ======================================================
+// LOCAL TEST MODULES
+// ======================================================
+
 const TEST_MODULES = import.meta.glob(
   "../data/questions/*/test*.js",
   {
@@ -57,7 +61,7 @@ function getLocalQuestions(examId, testNumber) {
 // ======================================================
 
 function getQuestions(test) {
-  // Firebase Array
+  // Firebase array
   if (
     Array.isArray(test?.questions) &&
     test.questions.length > 0
@@ -65,7 +69,7 @@ function getQuestions(test) {
     return test.questions.slice(0, 150);
   }
 
-  // Firebase Object
+  // Firebase object
   if (
     test?.questions &&
     typeof test.questions === "object"
@@ -83,7 +87,7 @@ function getQuestions(test) {
     }
   }
 
-  // Local JS fallback
+  // Local fallback
   return getLocalQuestions(
     test?.examId,
     test?.testNumber
@@ -101,6 +105,7 @@ function getOptions(q) {
         key: String.fromCharCode(
           65 + index
         ),
+
         value:
           typeof value === "object"
             ? value?.value ??
@@ -121,12 +126,14 @@ function getOptions(q) {
       ([key, value], index) => ({
         key:
           String(key).toUpperCase(),
+
         value:
           typeof value === "object"
             ? value?.value ??
               value?.text ??
               ""
             : value,
+
         index,
       })
     );
@@ -148,29 +155,29 @@ function normalizeAnswer(value) {
     return "";
   }
 
-  /*
-    IMPORTANT:
-    Number answer को सही तरीके से handle करें।
-    
-    0 = A
-    1 = B
-    2 = C
-    3 = D
-    
-    लेकिन अगर string "1" है तो
-    1 = A
-    2 = B
-    3 = C
-    4 = D
-  */
-
+  // Number
   if (typeof value === "number") {
+    /*
+      पहले 0,1,2,3 को A,B,C,D
+    */
     if (
       value >= 0 &&
       value <= 3
     ) {
       return String.fromCharCode(
         65 + value
+      );
+    }
+
+    /*
+      1,2,3,4 को A,B,C,D
+    */
+    if (
+      value >= 1 &&
+      value <= 4
+    ) {
+      return String.fromCharCode(
+        64 + value
       );
     }
   }
@@ -190,18 +197,19 @@ function normalizeAnswer(value) {
     return letter[1].toUpperCase();
   }
 
-  // Number stored as string
+  // B) Answer
+  const letterWithText =
+    text.match(
+      /^([A-Da-d])\s*[).:\-]\s*/
+    );
+
+  if (letterWithText) {
+    return letterWithText[1].toUpperCase();
+  }
+
+  // Number string
   if (/^\d+$/.test(text)) {
     const n = Number(text);
-
-    if (
-      n >= 1 &&
-      n <= 4
-    ) {
-      return String.fromCharCode(
-        64 + n
-      );
-    }
 
     if (
       n >= 0 &&
@@ -209,6 +217,15 @@ function normalizeAnswer(value) {
     ) {
       return String.fromCharCode(
         65 + n
+      );
+    }
+
+    if (
+      n >= 1 &&
+      n <= 4
+    ) {
+      return String.fromCharCode(
+        64 + n
       );
     }
   }
@@ -237,10 +254,7 @@ function getAnswer(q) {
 // CHECK ANSWER
 // ======================================================
 
-function isCorrect(
-  q,
-  selected
-) {
+function isCorrect(q, selected) {
   const correct =
     normalizeAnswer(
       getAnswer(q)
@@ -256,14 +270,13 @@ function isCorrect(
     return false;
   }
 
-  // Direct match
+  // Direct A/B/C/D
   if (
     correct === userAnswer
   ) {
     return true;
   }
 
-  // Compare option text
   const options =
     getOptions(q);
 
@@ -389,17 +402,13 @@ export default function TestRunner({
     useState(false);
 
   /*
-    IMPORTANT
+    ⭐ नया state
 
     false = पहली बार Test
 
-    true = Re-attempt
-
-    Re-attempt में option click करते ही
-    सही answer + explanation दिखेगी।
+    true = Test दोबारा / Re-attempt
   */
-
-  const [isReAttempt, setIsReAttempt] =
+  const [isReattempt, setIsReattempt] =
     useState(false);
 
   const durationMinutes =
@@ -422,7 +431,12 @@ export default function TestRunner({
     setCurrent(0);
     setAnswers({});
     setFinished(false);
-    setIsReAttempt(false);
+
+    /*
+      नया Test खोलने पर
+      Re-attempt mode बंद रहेगा
+    */
+    setIsReattempt(false);
 
     setTimeLeft(
       durationMinutes * 60
@@ -558,12 +572,8 @@ export default function TestRunner({
   // SELECT ANSWER
   // ====================================================
 
-  const choose = (
-    value
-  ) => {
-    if (finished) {
-      return;
-    }
+  const choose = (value) => {
+    if (finished) return;
 
     setAnswers(
       (previous) => ({
@@ -571,20 +581,6 @@ export default function TestRunner({
         [current]: value,
       })
     );
-
-    /*
-      Re-attempt में answer select करने के बाद
-      उसी question पर answer + explanation दिखेगी।
-    */
-
-    if (isReAttempt) {
-      setTimeout(() => {
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-      }, 50);
-    }
   };
 
   // ====================================================
@@ -612,12 +608,13 @@ export default function TestRunner({
 
   const restartTest = () => {
     /*
-      सबसे महत्वपूर्ण बदलाव:
+      ⭐ सबसे महत्वपूर्ण बदलाव
 
-      Re-attempt mode ON
+      अब Restart के बाद
+      Re-attempt mode TRUE होगा।
     */
 
-    setIsReAttempt(true);
+    setIsReattempt(true);
 
     setCurrent(0);
 
@@ -688,8 +685,7 @@ export default function TestRunner({
 
           <p
             style={{
-              color:
-                "#64748b",
+              color: "#64748b",
             }}
           >
             कृपया Admin Panel में
@@ -761,15 +757,22 @@ export default function TestRunner({
               style={{
                 display:
                   "inline-block",
+
                 marginTop: 15,
+
                 padding:
                   "18px 30px",
+
                 borderRadius: 16,
+
                 background:
                   "#eafaf0",
+
                 color:
                   "#137333",
+
                 fontSize: 30,
+
                 fontWeight: 900,
               }}
             >
@@ -809,9 +812,12 @@ export default function TestRunner({
             style={{
               display:
                 "grid",
+
               gridTemplateColumns:
                 "repeat(auto-fit, minmax(130px, 1fr))",
+
               gap: 12,
+
               margin:
                 "20px 0",
             }}
@@ -827,9 +833,7 @@ export default function TestRunner({
                   "center",
               }}
             >
-              <b>
-                ✅ सही
-              </b>
+              <b>✅ सही</b>
 
               <div
                 style={{
@@ -852,9 +856,7 @@ export default function TestRunner({
                   "center",
               }}
             >
-              <b>
-                ❌ गलत
-              </b>
+              <b>❌ गलत</b>
 
               <div
                 style={{
@@ -877,9 +879,7 @@ export default function TestRunner({
                   "center",
               }}
             >
-              <b>
-                ⚪ छोड़े
-              </b>
+              <b>⚪ छोड़े</b>
 
               <div
                 style={{
@@ -974,8 +974,6 @@ export default function TestRunner({
                     {q?.question}
                   </h3>
 
-                  {/* USER ANSWER */}
-
                   <div
                     style={{
                       marginTop: 8,
@@ -990,8 +988,6 @@ export default function TestRunner({
                       : "नहीं दिया"}
                   </div>
 
-                  {/* CORRECT ANSWER */}
-
                   <div
                     style={{
                       marginTop: 6,
@@ -1005,11 +1001,11 @@ export default function TestRunner({
 
                     {correctOption
                       ? `${correctOption.key}) ${correctOption.value}`
-                      : getAnswer(q) ||
+                      : getAnswer(
+                          q
+                        ) ||
                         "उपलब्ध नहीं"}
                   </div>
-
-                  {/* STATUS */}
 
                   <div
                     style={{
@@ -1028,904 +1024,4 @@ export default function TestRunner({
                   {/* EXPLANATION */}
 
                   <div
-                    style={{
-                      marginTop: 12,
-                      padding: 15,
-                      borderRadius: 12,
-                      background:
-                        "#fff8e5",
-                      border:
-                        "1px solid #f1d58a",
-                      lineHeight: 1.75,
-                    }}
-                  >
-
-                    <div>
-                      💡{" "}
-                      <strong>
-                        व्याख्या:
-                      </strong>
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 6,
-                      }}
-                    >
-                      {explanation}
-                    </div>
-
-                  </div>
-
-                  {/* IMPORTANT FACTS */}
-
-                  {importantFacts.length >
-                    0 && (
-                    <div
-                      style={{
-                        marginTop: 12,
-                        padding: 15,
-                        borderRadius: 12,
-                        background:
-                          "#f8fafc",
-                        border:
-                          "1px solid #cbd5e1",
-                        lineHeight: 1.8,
-                      }}
-                    >
-
-                      <div
-                        style={{
-                          fontWeight: 900,
-                          marginBottom: 8,
-                        }}
-                      >
-                        📌 महत्वपूर्ण तथ्य:
-                      </div>
-
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: 24,
-                        }}
-                      >
-                        {importantFacts.map(
-                          (
-                            fact,
-                            factIndex
-                          ) => (
-                            <li
-                              key={
-                                factIndex
-                              }
-                              style={{
-                                marginBottom: 4,
-                              }}
-                            >
-                              {fact}
-                            </li>
-                          )
-                        )}
-                      </ul>
-
-                    </div>
-                  )}
-
-                  {/* EXAM TRICK */}
-
-                  {examTrick && (
-                    <div
-                      style={{
-                        marginTop: 12,
-                        padding: 15,
-                        borderRadius: 12,
-                        background:
-                          "#eef2ff",
-                        border:
-                          "1px solid #c7d2fe",
-                        lineHeight: 1.8,
-                        fontWeight: 700,
-                      }}
-                    >
-
-                      <div
-                        style={{
-                          marginBottom: 6,
-                        }}
-                      >
-                        🧠{" "}
-                        <strong>
-                          Exam Trick:
-                        </strong>
-                      </div>
-
-                      <div>
-                        {examTrick}
-                      </div>
-
-                    </div>
-                  )}
-
-                </div>
-              );
-            }
-          )}
-
-          {/* BUTTONS */}
-
-          <div
-            style={{
-              display:
-                "flex",
-              justifyContent:
-                "center",
-              gap: 12,
-              flexWrap:
-                "wrap",
-              marginTop: 25,
-            }}
-          >
-
-            <button
-              type="button"
-              className="ai-button"
-              onClick={
-                restartTest
-              }
-            >
-              🔄 Test दोबारा दें
-            </button>
-
-            <button
-              type="button"
-              className="ai-button"
-              onClick={onBack}
-            >
-              ← Test List
-            </button>
-
-          </div>
-
-        </div>
-      </main>
-    );
-  }
-
-  // ====================================================
-  // CURRENT QUESTION
-  // ====================================================
-
-  const question =
-    questions[current];
-
-  const options =
-    getOptions(question);
-
-  const selected =
-    normalizeAnswer(
-      answers[current]
-    );
-
-  // ====================================================
-  // RE-ATTEMPT ANSWER DATA
-  // ====================================================
-
-  const currentCorrect =
-    normalizeAnswer(
-      getAnswer(question)
-    );
-
-  const currentCorrectOption =
-    options.find(
-      (option) =>
-        normalizeAnswer(
-          option.key
-        ) === currentCorrect
-    );
-
-  const currentSelectedOption =
-    options.find(
-      (option) =>
-        normalizeAnswer(
-          option.key
-        ) === selected
-    );
-
-  const currentIsCorrect =
-    selected
-      ? isCorrect(
-          question,
-          selected
-        )
-      : false;
-
-  const currentExplanation =
-    getExplanation(question);
-
-  const currentImportantFacts =
-    getImportantFacts(
-      question
-    );
-
-  const currentExamTrick =
-    getExamTrick(question);
-
-  // ====================================================
-  // TEST PAGE
-  // ====================================================
-
-  return (
-    <main className="ai-container">
-
-      <div className="ai-card">
-
-        {/* BACK */}
-
-        <button
-          type="button"
-          className="ai-button"
-          onClick={onBack}
-        >
-          ← Test Series
-        </button>
-
-        {/* RE-ATTEMPT NOTICE */}
-
-        {isReAttempt && (
-          <div
-            style={{
-              marginTop: 15,
-              padding:
-                "10px 14px",
-              borderRadius:
-                10,
-              background:
-                "#fff7ed",
-              border:
-                "1px solid #fed7aa",
-              color:
-                "#c2410c",
-              fontWeight: 800,
-            }}
-          >
-            🔄 Re-attempt Mode — Option चुनते ही
-            सही उत्तर और व्याख्या दिखाई जाएगी।
-          </div>
-        )}
-
-        {/* HEADER */}
-
-        <div
-          style={{
-            display:
-              "flex",
-            justifyContent:
-              "space-between",
-            alignItems:
-              "center",
-            gap: 15,
-            flexWrap:
-              "wrap",
-            marginTop: 18,
-          }}
-        >
-
-          <div>
-
-            <h1
-              style={{
-                marginBottom: 6,
-              }}
-            >
-              🎯{" "}
-              {test?.examTitle ||
-                test?.examName ||
-                ""}
-            </h1>
-
-            <h2
-              style={{
-                marginTop: 0,
-              }}
-            >
-              {test?.title ||
-                "Test"}
-            </h2>
-
-          </div>
-
-          {/* TIMER */}
-
-          <div
-            style={{
-              fontSize: 28,
-              fontWeight: 900,
-              color:
-                timeLeft <= 60
-                  ? "#dc2626"
-                  : timeLeft <= 300
-                  ? "#ea580c"
-                  : "#0f172a",
-            }}
-          >
-            ⏱️{" "}
-            {formatTime(
-              timeLeft
-            )}
-          </div>
-
-        </div>
-
-        {/* QUESTION AREA */}
-
-        <div
-          style={{
-            marginTop: 20,
-            padding: 20,
-            borderRadius: 16,
-            background:
-              "#f8fafc",
-            border:
-              "1px solid #dce3ed",
-          }}
-        >
-
-          {/* QUESTION HEADER */}
-
-          <div
-            style={{
-              display:
-                "flex",
-              justifyContent:
-                "space-between",
-              gap: 10,
-              flexWrap:
-                "wrap",
-            }}
-          >
-
-            <strong>
-              प्रश्न{" "}
-              {current + 1} /{" "}
-              {questions.length}
-            </strong>
-
-            <strong>
-              Answered:{" "}
-              {
-                Object.keys(
-                  answers
-                ).length
-              }
-            </strong>
-
-          </div>
-
-          {/* PROGRESS */}
-
-          <div
-            style={{
-              width:
-                "100%",
-              height: 8,
-              background:
-                "#e5e7eb",
-              borderRadius:
-                10,
-              overflow:
-                "hidden",
-              marginTop: 14,
-              marginBottom: 20,
-            }}
-          >
-
-            <div
-              style={{
-                width:
-                  `${
-                    ((current + 1) /
-                      questions.length) *
-                    100
-                  }%`,
-                height:
-                  "100%",
-                background:
-                  "#2563eb",
-                transition:
-                  "width 0.2s ease",
-              }}
-            />
-
-          </div>
-
-          {/* QUESTION */}
-
-          <h2
-            style={{
-              lineHeight: 1.6,
-              overflowWrap:
-                "anywhere",
-            }}
-          >
-            {current + 1}.{" "}
-            {question?.question}
-          </h2>
-
-          {/* OPTIONS */}
-
-          <div
-            style={{
-              display:
-                "grid",
-              gap: 12,
-              marginTop: 18,
-            }}
-          >
-
-            {options.map(
-              (option) => {
-
-                const active =
-                  selected ===
-                  normalizeAnswer(
-                    option.key
-                  );
-
-                const isCorrectOption =
-                  normalizeAnswer(
-                    option.key
-                  ) ===
-                  currentCorrect;
-
-                /*
-                  Re-attempt में:
-                  
-                  सही option = green
-                  
-                  user ने गलत option चुना =
-                  red
-                */
-
-                let border =
-                  active
-                    ? "2px solid #2563eb"
-                    : "1px solid #cbd5e1";
-
-                let background =
-                  active
-                    ? "#eff6ff"
-                    : "#ffffff";
-
-                if (
-                  isReAttempt &&
-                  selected
-                ) {
-                  if (
-                    isCorrectOption
-                  ) {
-                    border =
-                      "2px solid #16a34a";
-
-                    background =
-                      "#dcfce7";
-                  } else if (
-                    active &&
-                    !isCorrectOption
-                  ) {
-                    border =
-                      "2px solid #dc2626";
-
-                    background =
-                      "#fee2e2";
-                  }
-                }
-
-                return (
-                  <button
-                    key={
-                      option.key
-                    }
-                    type="button"
-                    onClick={() =>
-                      choose(
-                        option.key
-                      )
-                    }
-                    style={{
-                      width:
-                        "100%",
-                      display:
-                        "flex",
-                      alignItems:
-                        "flex-start",
-                      gap: 10,
-                      textAlign:
-                        "left",
-                      padding: 16,
-                      borderRadius:
-                        12,
-                      border,
-                      background,
-                      color:
-                        "#111827",
-                      cursor:
-                        "pointer",
-                      fontSize:
-                        17,
-                      lineHeight:
-                        1.5,
-                      boxSizing:
-                        "border-box",
-                      overflowWrap:
-                        "anywhere",
-                    }}
-                  >
-
-                    <strong
-                      style={{
-                        minWidth: 28,
-                      }}
-                    >
-                      {
-                        option.key
-                      }
-                      )
-                    </strong>
-
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                      }}
-                    >
-                      {
-                        option.value
-                      }
-                    </span>
-
-                    {/* RE-ATTEMPT ICON */}
-
-                    {isReAttempt &&
-                      selected &&
-                      isCorrectOption && (
-                        <span
-                          style={{
-                            fontWeight:
-                              900,
-                            color:
-                              "#15803d",
-                            fontSize:
-                              20,
-                          }}
-                        >
-                          ✓
-                        </span>
-                      )}
-
-                    {isReAttempt &&
-                      selected &&
-                      active &&
-                      !isCorrectOption && (
-                        <span
-                          style={{
-                            fontWeight:
-                              900,
-                            color:
-                              "#dc2626",
-                            fontSize:
-                              20,
-                          }}
-                        >
-                          ✕
-                        </span>
-                      )}
-
-                  </button>
-                );
-              }
-            )}
-
-          </div>
-
-          {/* ==================================================
-              RE-ATTEMPT ANSWER + EXPLANATION
-          ================================================== */}
-
-          {isReAttempt &&
-            selected && (
-              <div
-                style={{
-                  marginTop: 22,
-                }}
-              >
-
-                {/* RESULT */}
-
-                <div
-                  style={{
-                    padding: 15,
-                    borderRadius: 12,
-                    background:
-                      currentIsCorrect
-                        ? "#dcfce7"
-                        : "#fee2e2",
-                    border:
-                      currentIsCorrect
-                        ? "1px solid #86efac"
-                        : "1px solid #fca5a5",
-                    color:
-                      currentIsCorrect
-                        ? "#166534"
-                        : "#991b1b",
-                    fontWeight: 900,
-                    fontSize: 17,
-                  }}
-                >
-                  {currentIsCorrect
-                    ? "✅ आपका उत्तर सही है"
-                    : "❌ आपका उत्तर गलत है"}
-                </div>
-
-                {/* USER ANSWER */}
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 15,
-                    borderRadius: 12,
-                    background:
-                      "#f8fafc",
-                    border:
-                      "1px solid #cbd5e1",
-                  }}
-                >
-
-                  <strong>
-                    आपका उत्तर:
-                  </strong>{" "}
-
-                  {currentSelectedOption
-                    ? `${currentSelectedOption.key}) ${currentSelectedOption.value}`
-                    : "नहीं दिया"}
-
-                </div>
-
-                {/* CORRECT ANSWER */}
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 15,
-                    borderRadius: 12,
-                    background:
-                      "#ecfdf5",
-                    border:
-                      "1px solid #86efac",
-                    color:
-                      "#166534",
-                  }}
-                >
-
-                  <strong>
-                    ✅ सही उत्तर:
-                  </strong>{" "}
-
-                  {currentCorrectOption
-                    ? `${currentCorrectOption.key}) ${currentCorrectOption.value}`
-                    : getAnswer(
-                        question
-                      ) ||
-                      "उपलब्ध नहीं"}
-
-                </div>
-
-                {/* EXPLANATION */}
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: 16,
-                    borderRadius: 12,
-                    background:
-                      "#fff8e5",
-                    border:
-                      "1px solid #f1d58a",
-                    lineHeight:
-                      1.75,
-                  }}
-                >
-
-                  <div
-                    style={{
-                      fontWeight:
-                        900,
-                      marginBottom:
-                        7,
-                      fontSize:
-                        17,
-                    }}
-                  >
-                    💡 व्याख्या
-                  </div>
-
-                  <div>
-                    {
-                      currentExplanation
-                    }
-                  </div>
-
-                </div>
-
-                {/* IMPORTANT FACTS */}
-
-                {currentImportantFacts.length >
-                  0 && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      padding: 16,
-                      borderRadius: 12,
-                      background:
-                        "#f8fafc",
-                      border:
-                        "1px solid #cbd5e1",
-                      lineHeight:
-                        1.8,
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        fontWeight:
-                          900,
-                        marginBottom:
-                          8,
-                      }}
-                    >
-                      📌 महत्वपूर्ण तथ्य
-                    </div>
-
-                    <ul
-                      style={{
-                        margin: 0,
-                        paddingLeft:
-                          24,
-                      }}
-                    >
-                      {currentImportantFacts.map(
-                        (
-                          fact,
-                          index
-                        ) => (
-                          <li
-                            key={
-                              index
-                            }
-                          >
-                            {fact}
-                          </li>
-                        )
-                      )}
-                    </ul>
-
-                  </div>
-                )}
-
-                {/* EXAM TRICK */}
-
-                {currentExamTrick && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      padding: 16,
-                      borderRadius: 12,
-                      background:
-                        "#eef2ff",
-                      border:
-                        "1px solid #c7d2fe",
-                      lineHeight:
-                        1.8,
-                    }}
-                  >
-
-                    <div
-                      style={{
-                        fontWeight:
-                          900,
-                        marginBottom:
-                          7,
-                      }}
-                    >
-                      🧠 Exam Trick
-                    </div>
-
-                    <div>
-                      {
-                        currentExamTrick
-                      }
-                    </div>
-
-                  </div>
-                )}
-
-              </div>
-            )}
-
-        </div>
-
-        {/* NAVIGATION */}
-
-        <div
-          style={{
-            display:
-              "flex",
-            justifyContent:
-              "space-between",
-            gap: 10,
-            flexWrap:
-              "wrap",
-            marginTop: 20,
-          }}
-        >
-
-          <button
-            type="button"
-            className="ai-button"
-            disabled={
-              current === 0
-            }
-            onClick={() =>
-              setCurrent(
-                (v) =>
-                  Math.max(
-                    0,
-                    v - 1
-                  )
-              )
-            }
-          >
-            ← पिछला
-          </button>
-
-          {current <
-          questions.length -
-            1 ? (
-
-            <button
-              type="button"
-              className="ai-button"
-              onClick={() =>
-                setCurrent(
-                  (v) =>
-                    Math.min(
-                      questions.length -
-                        1,
-                      v + 1
-                    )
-                )
-              }
-            >
-              अगला →
-            </button>
-
-          ) : (
-
-            <button
-              type="button"
-              className="ai-button"
-              onClick={
-                submitTest
-              }
-            >
-              ✅ Test Submit करें
-            </button>
-
-          )}
-
-        </div>
-
-      </div>
-
-    </main>
-  );
-}
+   
