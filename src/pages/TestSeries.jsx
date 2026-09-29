@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import "./TestSeries.css";
 
 import {
   getApps,
@@ -10,221 +9,383 @@ import {
 import {
   getDatabase,
   ref,
-  onValue,
+  get,
 } from "firebase/database";
 
 import firebaseConfig from "../firebase-config.json";
 
-// ======================================================
-// FIREBASE INITIALIZE
-// ======================================================
+import "../App.css";
+
+/* ======================================================
+   FIREBASE
+====================================================== */
 
 const firebaseApp = getApps().length
   ? getApp()
-  : initializeApp(firebaseConfig);
+  : initializeApp({
+      ...firebaseConfig,
+      databaseURL:
+        firebaseConfig.databaseURL ||
+        "https://study-with-power-f6914-default-rtdb.asia-southeast1.firebasedatabase.app",
+    });
 
 const db = getDatabase(firebaseApp);
 
-// ======================================================
-// TEST SERIES
-// ======================================================
+/* ======================================================
+   HELPERS
+====================================================== */
 
-export default function TestSeries({ onBack, onStartTest }) {
+function getQuestionsCount(test) {
+  if (!test) return 0;
 
+  if (Array.isArray(test.questions)) {
+    return test.questions.length;
+  }
+
+  if (
+    test.questions &&
+    typeof test.questions === "object"
+  ) {
+    return Object.keys(test.questions).length;
+  }
+
+  if (typeof test.questionCount === "number") {
+    return test.questionCount;
+  }
+
+  if (typeof test.questionsCount === "number") {
+    return test.questionsCount;
+  }
+
+  return 0;
+}
+
+function getDuration(test) {
+  return (
+    test?.durationMinutes ??
+    test?.duration ??
+    test?.timeLimit ??
+    test?.time ??
+    0
+  );
+}
+
+function getPrice(test) {
+  return (
+    test?.price ??
+    test?.amount ??
+    test?.testPrice ??
+    0
+  );
+}
+
+function isTestPublic(test) {
+  if (!test) return false;
+
+  /*
+    अलग-अलग पुराने test formats को support किया गया है
+  */
+
+  const status = String(
+    test.status ??
+      test.visibility ??
+      test.publishStatus ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+
+  /*
+    Admin Panel में PUBLIC दिख रहा है,
+    इसलिए PUBLIC को जरूर allow करें।
+  */
+
+  if (
+    status === "public" ||
+    status === "published" ||
+    status === "active" ||
+    status === "live"
+  ) {
+    return true;
+  }
+
+  /*
+    Boolean fields भी support
+  */
+
+  if (
+    test.isPublic === true ||
+    test.public === true ||
+    test.published === true ||
+    test.active === true
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/* ======================================================
+   TEST SERIES
+====================================================== */
+
+export default function TestSeries({
+  onBack,
+  onStartTest,
+}) {
   const [tests, setTests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  // ====================================================
-  // LOAD TESTS FROM FIREBASE
-  // ====================================================
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  /* ====================================================
+     LOAD TESTS
+  ==================================================== */
 
   useEffect(() => {
+    let mounted = true;
 
-    setLoading(true);
-    setError("");
+    const loadTests = async () => {
+      try {
+        setLoading(true);
+        setError("");
 
-    // Admin panel में सामान्यतः tests इसी तरह save होते हैं
-    const testsRef = ref(db, "tests");
+        console.log(
+          "TEST SERIES: Firebase से tests load हो रहे हैं..."
+        );
 
-    const unsubscribe = onValue(
-      testsRef,
-      (snapshot) => {
+        /*
+          IMPORTANT:
+          Admin Panel में जिस path पर tests save हैं,
+          वही path यहाँ use किया गया है।
+        */
 
-        const data = snapshot.val();
+        const snapshot = await get(
+          ref(db, "tests")
+        );
 
-        console.log("TEST DATA FROM FIREBASE:", data);
+        if (!mounted) return;
 
-        if (!data) {
+        if (!snapshot.exists()) {
+          console.log(
+            "TEST SERIES: tests path खाली है"
+          );
+
           setTests([]);
-          setLoading(false);
           return;
         }
 
-        const list = [];
+        const data = snapshot.val();
 
-        Object.entries(data).forEach(([id, value]) => {
-
-          if (!value || typeof value !== "object") {
-            return;
-          }
-
-          // केवल PUBLIC tests दिखाएं
-          const status = String(
-            value.status ||
-            value.visibility ||
-            "PUBLIC"
-          ).toUpperCase();
-
-          if (
-            status !== "PUBLIC" &&
-            status !== "PUBLISHED" &&
-            status !== "ACTIVE"
-          ) {
-            return;
-          }
-
-          list.push({
-            id,
-
-            title:
-              value.title ||
-              value.name ||
-              value.testName ||
-              "Test",
-
-            exam:
-              value.exam ||
-              value.examName ||
-              value.category ||
-              "",
-
-            testNo:
-              value.testNo ??
-              value.testNumber ??
-              value.testSeriesNo ??
-              value.seriesNo ??
-              "",
-
-            questions:
-              value.questionsCount ??
-              value.questionCount ??
-              value.totalQuestions ??
-              (
-                Array.isArray(value.questions)
-                  ? value.questions.length
-                  : value.questions
-                    ? Object.keys(value.questions).length
-                    : 0
-              ),
-
-            duration:
-              value.duration ??
-              value.durationMinutes ??
-              value.time ??
-              0,
-
-            price:
-              value.price ??
-              value.amount ??
-              0,
-
-            description:
-              value.description || "",
-
-            raw: value,
-          });
-        });
-
-        // Test No. के हिसाब से sort
-        list.sort((a, b) => {
-
-          const noA = Number(a.testNo) || 0;
-          const noB = Number(b.testNo) || 0;
-
-          return noA - noB;
-        });
-
-        setTests(list);
-        setLoading(false);
-      },
-
-      (err) => {
-
-        console.error("Firebase Test Error:", err);
-
-        setError(
-          "Test Series लोड नहीं हो सकी। Firebase Permission Rules चेक करें।"
+        console.log(
+          "TEST SERIES: Firebase raw data:",
+          data
         );
 
-        setLoading(false);
+        let loadedTests = [];
+
+        /* ==============================================
+           Firebase object format
+        ============================================== */
+
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data)
+        ) {
+          loadedTests =
+            Object.entries(data).map(
+              ([id, test]) => ({
+                id,
+
+                ...test,
+
+                raw: {
+                  id,
+                  ...test,
+                },
+              })
+            );
+        }
+
+        /* ==============================================
+           Firebase array format
+        ============================================== */
+
+        else if (Array.isArray(data)) {
+          loadedTests =
+            data
+              .map((test, index) => {
+                if (!test) return null;
+
+                return {
+                  id:
+                    test.id ||
+                    String(index),
+
+                  ...test,
+
+                  raw: {
+                    id:
+                      test.id ||
+                      String(index),
+
+                    ...test,
+                  },
+                };
+              })
+              .filter(Boolean);
+        }
+
+        console.log(
+          "TEST SERIES: Total tests:",
+          loadedTests.length
+        );
+
+        /*
+          केवल PUBLIC / PUBLISHED / ACTIVE tests
+        */
+
+        const publicTests =
+          loadedTests.filter(
+            (test) =>
+              isTestPublic(test)
+          );
+
+        console.log(
+          "TEST SERIES: Public tests:",
+          publicTests
+        );
+
+        /*
+          Test Number के अनुसार sort
+        */
+
+        publicTests.sort(
+          (a, b) => {
+            const aNo = Number(
+              a.testNumber ??
+                a.testNo ??
+                a.number ??
+                999999
+            );
+
+            const bNo = Number(
+              b.testNumber ??
+                b.testNo ??
+                b.number ??
+                999999
+            );
+
+            return aNo - bNo;
+          }
+        );
+
+        setTests(
+          publicTests
+        );
+      } catch (err) {
+        console.error(
+          "TEST SERIES LOAD ERROR:",
+          err
+        );
+
+        if (mounted) {
+          setError(
+            err?.message ||
+              "Test Series load नहीं हो सकी।"
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-    );
+    };
 
-    return () => unsubscribe();
+    loadTests();
 
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // ====================================================
-  // START TEST
-  // ====================================================
+  /* ====================================================
+     START TEST
+  ==================================================== */
 
-  const handleStartTest = (test) => {
-
-    console.log("Starting Test:", test);
-
-    if (typeof onStartTest === "function") {
-      onStartTest(test);
-      return;
-    }
-
-    // अगर App.jsx में navigation नहीं दिया है
-    // तो test को localStorage में रख दें
-    try {
-      localStorage.setItem(
-        "selectedTest",
-        JSON.stringify(test)
-      );
-    } catch (e) {
-      console.error(e);
-    }
-
-    // Custom event
-    window.dispatchEvent(
-      new CustomEvent("startTest", {
-        detail: test,
-      })
+  const handleStart = (test) => {
+    console.log(
+      "START TEST:",
+      test
     );
-  };
 
-  // ====================================================
-  // BACK
-  // ====================================================
+    if (!test) {
+      alert(
+        "❌ Test data नहीं मिला।"
+      );
 
-  const handleBack = () => {
-
-    if (typeof onBack === "function") {
-      onBack();
       return;
     }
 
-    window.history.back();
+    if (
+      typeof onStartTest ===
+      "function"
+    ) {
+      onStartTest({
+        id: test.id,
+
+        title:
+          test.title ||
+          test.name ||
+          "Test",
+
+        exam:
+          test.exam ||
+          test.examName ||
+          "",
+
+        testNo:
+          test.testNumber ??
+          test.testNo ??
+          test.number ??
+          1,
+
+        duration:
+          getDuration(test),
+
+        questions:
+          test.questions || [],
+
+        raw: test.raw || test,
+      });
+    } else {
+      console.error(
+        "onStartTest function नहीं मिली।"
+      );
+    }
   };
 
-  // ====================================================
-  // UI
-  // ====================================================
+  /* ====================================================
+     LOADING
+  ==================================================== */
 
-  return (
-    <div className="test-series-page">
-
-      {/* HEADER */}
-
-      <div className="test-series-header">
-
+  if (loading) {
+    return (
+      <div
+        className="page-container"
+        style={{
+          padding:
+            "30px 20px",
+        }}
+      >
         <button
-          className="home-btn"
-          onClick={handleBack}
+          type="button"
+          className="back-btn"
+          onClick={onBack}
         >
           ← Home
         </button>
@@ -234,180 +395,450 @@ export default function TestSeries({ onBack, onStartTest }) {
         </h1>
 
         <p>
-          अपनी Test Series यहाँ देखें और परीक्षा की तैयारी करें।
+          ⏳ Test Series load हो रही है...
         </p>
-
       </div>
+    );
+  }
 
-      {/* LOADING */}
+  /* ====================================================
+     ERROR
+  ==================================================== */
 
-      {loading && (
-        <div className="test-loading">
-          <div className="loading-spinner"></div>
+  if (error) {
+    return (
+      <div
+        className="page-container"
+        style={{
+          padding:
+            "30px 20px",
+        }}
+      >
+        <button
+          type="button"
+          className="back-btn"
+          onClick={onBack}
+        >
+          ← Home
+        </button>
 
-          <p>
-            Test Series लोड हो रही है...
-          </p>
-        </div>
-      )}
+        <h1>
+          🎯 Test Series
+        </h1>
 
-      {/* ERROR */}
-
-      {!loading && error && (
-        <div className="test-error">
-          <div className="error-icon">
-            ⚠️
-          </div>
-
-          <h3>
-            समस्या आ गई
-          </h3>
+        <div
+          style={{
+            padding: "20px",
+            marginTop: "20px",
+            background: "#fee2e2",
+            borderRadius: "12px",
+            color: "#991b1b",
+          }}
+        >
+          <strong>
+            ❌ Error
+          </strong>
 
           <p>
             {error}
           </p>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* NO TEST */}
+  /* ====================================================
+     EMPTY
+  ==================================================== */
 
-      {!loading &&
-        !error &&
-        tests.length === 0 && (
+  if (tests.length === 0) {
+    return (
+      <div
+        className="page-container"
+        style={{
+          padding:
+            "30px 20px",
+        }}
+      >
+        <button
+          type="button"
+          className="back-btn"
+          onClick={onBack}
+        >
+          ← Home
+        </button>
 
-          <div className="no-tests">
+        <h1>
+          🎯 Test Series
+        </h1>
 
-            <div className="no-test-icon">
-              📚
-            </div>
+        <p>
+          आपकी Test Series यहाँ दिखाई जाएगी।
+        </p>
 
-            <h2>
-              अभी कोई Test Series उपलब्ध नहीं है
-            </h2>
+        <div
+          style={{
+            marginTop:
+              "30px",
 
-            <p>
-              Admin Panel से PUBLIC Test बनाने के बाद
-              वह यहाँ दिखाई देगा।
-            </p>
+            padding:
+              "30px 20px",
 
+            textAlign:
+              "center",
+
+            background:
+              "#ffffff",
+
+            border:
+              "1px solid #e5e7eb",
+
+            borderRadius:
+              "16px",
+
+            boxShadow:
+              "0 4px 15px rgba(0,0,0,0.06)",
+          }}
+        >
+          <div
+            style={{
+              fontSize:
+                "50px",
+              marginBottom:
+                "10px",
+            }}
+          >
+            📚
           </div>
-        )}
 
-      {/* TEST LIST */}
+          <h2>
+            अभी कोई Public Test उपलब्ध नहीं है
+          </h2>
 
-      {!loading &&
-        !error &&
-        tests.length > 0 && (
+          <p
+            style={{
+              color:
+                "#64748b",
+            }}
+          >
+            Admin Panel में Public Test
+            होने पर यहाँ दिखाई देगा।
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-          <div className="test-list">
+  /* ====================================================
+     TEST LIST
+  ==================================================== */
 
-            {tests.map((test) => (
+  return (
+    <div
+      className="page-container"
+      style={{
+        padding:
+          "25px 18px 40px",
+      }}
+    >
+      {/* BACK */}
 
+      <button
+        type="button"
+        className="back-btn"
+        onClick={onBack}
+        style={{
+          marginBottom:
+            "20px",
+        }}
+      >
+        ← Home
+      </button>
+
+      {/* HEADER */}
+
+      <div
+        style={{
+          marginBottom:
+            "25px",
+        }}
+      >
+        <h1
+          style={{
+            marginBottom:
+              "8px",
+          }}
+        >
+          🎯 Test Series
+        </h1>
+
+        <p
+          style={{
+            color:
+              "#64748b",
+            margin:
+              "0",
+          }}
+        >
+          आपकी Test Series यहाँ दिखाई जाएगी।
+        </p>
+      </div>
+
+      {/* TEST COUNT */}
+
+      <div
+        style={{
+          marginBottom:
+            "20px",
+
+          padding:
+            "12px 16px",
+
+          background:
+            "#eff6ff",
+
+          borderRadius:
+            "10px",
+
+          color:
+            "#1d4ed8",
+
+          fontWeight:
+            "700",
+        }}
+      >
+        📚 कुल Public Tests:{" "}
+        {tests.length}
+      </div>
+
+      {/* LIST */}
+
+      <div
+        style={{
+          display:
+            "grid",
+
+          gap:
+            "18px",
+        }}
+      >
+        {tests.map(
+          (test, index) => {
+            const questionCount =
+              getQuestionsCount(
+                test
+              );
+
+            const duration =
+              getDuration(test);
+
+            const price =
+              getPrice(test);
+
+            const title =
+              test.title ||
+              test.name ||
+              `Test ${index + 1}`;
+
+            const exam =
+              test.exam ||
+              test.examName ||
+              test.examTitle ||
+              "General";
+
+            const testNumber =
+              test.testNumber ??
+              test.testNo ??
+              test.number ??
+              index + 1;
+
+            return (
               <div
-                className="test-card"
-                key={test.id}
-              >
+                key={
+                  test.id ||
+                  index
+                }
+                style={{
+                  background:
+                    "#ffffff",
 
+                  border:
+                    "1px solid #dbe4ee",
+
+                  borderRadius:
+                    "18px",
+
+                  padding:
+                    "20px",
+
+                  boxShadow:
+                    "0 4px 16px rgba(15,23,42,0.06)",
+                }}
+              >
                 {/* TITLE */}
 
-                <div className="test-title-row">
+                <h2
+                  style={{
+                    margin:
+                      "0 0 12px",
 
-                  <div className="test-icon">
-                    🎯
-                  </div>
+                    color:
+                      "#0f2747",
 
-                  <div>
-                    <h2>
-                      {test.title}
-                    </h2>
+                    fontSize:
+                      "22px",
+                  }}
+                >
+                  📚 {title}
+                </h2>
 
-                    {test.exam && (
-                      <p className="exam-name">
-                        Exam: {test.exam}
-                      </p>
-                    )}
-                  </div>
+                {/* EXAM */}
 
-                </div>
+                <p
+                  style={{
+                    margin:
+                      "8px 0",
+
+                    color:
+                      "#64748b",
+
+                    fontSize:
+                      "16px",
+                  }}
+                >
+                  <strong>
+                    Exam:
+                  </strong>{" "}
+                  {exam}
+                </p>
 
                 {/* DETAILS */}
 
-                <div className="test-details">
+                <p
+                  style={{
+                    margin:
+                      "8px 0",
 
-                  {test.testNo !== "" && (
-                    <div className="detail-row">
-                      <span>
-                        📝 Test No.
-                      </span>
+                    color:
+                      "#64748b",
 
-                      <strong>
-                        {test.testNo}
-                      </strong>
-                    </div>
-                  )}
+                    fontSize:
+                      "16px",
+                  }}
+                >
+                  <strong>
+                    Test No:
+                  </strong>{" "}
+                  {testNumber}
+                  {" • "}
+                  <strong>
+                    Questions:
+                  </strong>{" "}
+                  {questionCount}
+                  {" • "}
+                  <strong>
+                    Duration:
+                  </strong>{" "}
+                  {duration} min
+                </p>
 
-                  <div className="detail-row">
-                    <span>
-                      ❓ Questions
-                    </span>
+                {/* PRICE */}
 
-                    <strong>
-                      {test.questions || 0}
-                    </strong>
-                  </div>
+                <p
+                  style={{
+                    margin:
+                      "8px 0 12px",
 
-                  <div className="detail-row">
-                    <span>
-                      ⏱️ Duration
-                    </span>
+                    color:
+                      "#64748b",
 
-                    <strong>
-                      {test.duration || 0} min
-                    </strong>
-                  </div>
-
-                  <div className="detail-row">
-                    <span>
-                      💰 Price
-                    </span>
-
-                    <strong>
-                      ₹{test.price || 0}
-                    </strong>
-                  </div>
-
-                </div>
+                    fontSize:
+                      "16px",
+                  }}
+                >
+                  <strong>
+                    Price:
+                  </strong>{" "}
+                  ₹{price}
+                </p>
 
                 {/* PUBLIC */}
 
-                <div className="public-badge">
-                  ✓ PUBLIC
+                <div
+                  style={{
+                    display:
+                      "inline-block",
+
+                    padding:
+                      "6px 14px",
+
+                    background:
+                      "#dcfce7",
+
+                    color:
+                      "#15803d",
+
+                    borderRadius:
+                      "999px",
+
+                    fontWeight:
+                      "800",
+
+                    fontSize:
+                      "14px",
+
+                    marginBottom:
+                      "15px",
+                  }}
+                >
+                  PUBLIC
                 </div>
 
-                {/* DESCRIPTION */}
-
-                {test.description && (
-                  <p className="test-description">
-                    {test.description}
-                  </p>
-                )}
-
-                {/* START */}
+                {/* START BUTTON */}
 
                 <button
-                  className="start-test-btn"
-                  onClick={() => handleStartTest(test)}
+                  type="button"
+                  onClick={() =>
+                    handleStart(
+                      test
+                    )
+                  }
+                  style={{
+                    width:
+                      "100%",
+
+                    padding:
+                      "13px 18px",
+
+                    border:
+                      "none",
+
+                    borderRadius:
+                      "10px",
+
+                    background:
+                      "#087bea",
+
+                    color:
+                      "#ffffff",
+
+                    fontSize:
+                      "17px",
+
+                    fontWeight:
+                      "800",
+
+                    cursor:
+                      "pointer",
+                  }}
                 >
-                  🚀 Start Test
+                  ▶️ Test Start करें
                 </button>
-
               </div>
-
-            ))}
-
-          </div>
+            );
+          }
         )}
-
+      </div>
     </div>
   );
 }
