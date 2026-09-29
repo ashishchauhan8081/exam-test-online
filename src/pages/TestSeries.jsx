@@ -32,80 +32,11 @@ const firebaseApp = getApps().length
 const db = getDatabase(firebaseApp);
 
 /* ======================================================
-   ATTEMPT STORAGE KEY
-====================================================== */
-
-const ATTEMPT_STORAGE_KEY =
-  "study_with_power_test_attempts";
-
-/* ======================================================
-   GET ATTEMPTED TESTS
-====================================================== */
-
-function getAttemptedTests() {
-  try {
-    const data = localStorage.getItem(
-      ATTEMPT_STORAGE_KEY
-    );
-
-    if (!data) {
-      return {};
-    }
-
-    const parsed = JSON.parse(data);
-
-    if (
-      parsed &&
-      typeof parsed === "object"
-    ) {
-      return parsed;
-    }
-
-    return {};
-  } catch (error) {
-    console.error(
-      "Attempt data read error:",
-      error
-    );
-
-    return {};
-  }
-}
-
-/* ======================================================
-   CHECK TEST ATTEMPTED
-====================================================== */
-
-function isTestAttempted(test) {
-  if (!test) {
-    return false;
-  }
-
-  const attempts =
-    getAttemptedTests();
-
-  const possibleIds = [
-    test.id,
-    test.testId,
-    `${test.examId || test.exam || ""}_${test.testNumber ?? test.testNo ?? test.number ?? ""}`,
-    `${test.exam || test.examName || ""}_${test.testNumber ?? test.testNo ?? test.number ?? ""}`,
-  ].filter(Boolean);
-
-  return possibleIds.some(
-    (id) =>
-      attempts[String(id)] === true ||
-      attempts[String(id)]?.completed === true
-  );
-}
-
-/* ======================================================
-   QUESTIONS COUNT
+   HELPERS
 ====================================================== */
 
 function getQuestionsCount(test) {
-  if (!test) {
-    return 0;
-  }
+  if (!test) return 0;
 
   if (Array.isArray(test.questions)) {
     return test.questions.length;
@@ -115,22 +46,14 @@ function getQuestionsCount(test) {
     test.questions &&
     typeof test.questions === "object"
   ) {
-    return Object.keys(
-      test.questions
-    ).length;
+    return Object.keys(test.questions).length;
   }
 
-  if (
-    typeof test.questionCount ===
-    "number"
-  ) {
+  if (typeof test.questionCount === "number") {
     return test.questionCount;
   }
 
-  if (
-    typeof test.questionsCount ===
-    "number"
-  ) {
+  if (typeof test.questionsCount === "number") {
     return test.questionsCount;
   }
 
@@ -165,13 +88,11 @@ function getPrice(test) {
 }
 
 /* ======================================================
-   PUBLIC TEST CHECK
+   PUBLIC TEST
 ====================================================== */
 
 function isTestPublic(test) {
-  if (!test) {
-    return false;
-  }
+  if (!test) return false;
 
   const status = String(
     test.status ??
@@ -204,6 +125,18 @@ function isTestPublic(test) {
 }
 
 /* ======================================================
+   ATTEMPT KEY
+====================================================== */
+
+function getAttemptKey(test) {
+  return `test_attempted_${String(
+    test?.id ??
+      test?.testId ??
+      `${test?.examId || test?.exam || "general"}_${test?.testNumber || test?.testNo || test?.number || 1}`
+  )}`;
+}
+
+/* ======================================================
    TEST SERIES
 ====================================================== */
 
@@ -211,11 +144,7 @@ export default function TestSeries({
   onBack,
   onStartTest,
 }) {
-  const [tests, setTests] =
-    useState([]);
-
-  const [attempts, setAttempts] =
-    useState({});
+  const [tests, setTests] = useState([]);
 
   const [loading, setLoading] =
     useState(true);
@@ -224,218 +153,154 @@ export default function TestSeries({
     useState("");
 
   /* ====================================================
-     LOAD ATTEMPT STATUS
-  ==================================================== */
-
-  useEffect(() => {
-    const loadAttempts = () => {
-      setAttempts(
-        getAttemptedTests()
-      );
-    };
-
-    loadAttempts();
-
-    const handleStorage =
-      () => {
-        loadAttempts();
-      };
-
-    window.addEventListener(
-      "storage",
-      handleStorage
-    );
-
-    window.addEventListener(
-      "testAttemptUpdated",
-      handleStorage
-    );
-
-    return () => {
-      window.removeEventListener(
-        "storage",
-        handleStorage
-      );
-
-      window.removeEventListener(
-        "testAttemptUpdated",
-        handleStorage
-      );
-    };
-  }, []);
-
-  /* ====================================================
      LOAD TESTS
   ==================================================== */
 
   useEffect(() => {
     let mounted = true;
 
-    const loadTests =
-      async () => {
-        try {
-          setLoading(true);
-          setError("");
+    const loadTests = async () => {
+      try {
+        setLoading(true);
+        setError("");
 
-          console.log(
-            "TEST SERIES: Firebase से tests load हो रहे हैं..."
-          );
+        console.log(
+          "TEST SERIES: Firebase से tests load हो रहे हैं..."
+        );
 
-          const snapshot =
-            await get(
-              ref(db, "tests")
-            );
+        const snapshot = await get(
+          ref(db, "tests")
+        );
 
-          if (!mounted) {
-            return;
-          }
+        if (!mounted) return;
 
-          if (!snapshot.exists()) {
-            console.log(
-              "TEST SERIES: tests path खाली है"
-            );
+        if (!snapshot.exists()) {
+          setTests([]);
+          return;
+        }
 
-            setTests([]);
-            return;
-          }
+        const data = snapshot.val();
 
-          const data =
-            snapshot.val();
+        console.log(
+          "TEST SERIES: Firebase raw data:",
+          data
+        );
 
-          console.log(
-            "TEST SERIES: Firebase raw data:",
-            data
-          );
+        let loadedTests = [];
 
-          let loadedTests = [];
+        /* ==============================================
+           OBJECT FORMAT
+        ============================================== */
 
-          /* ==========================================
-             OBJECT FORMAT
-          ========================================== */
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data)
+        ) {
+          loadedTests =
+            Object.entries(data).map(
+              ([id, test]) => ({
+                id,
 
-          if (
-            data &&
-            typeof data ===
-              "object" &&
-            !Array.isArray(data)
-          ) {
-            loadedTests =
-              Object.entries(
-                data
-              ).map(
-                ([id, test]) => ({
+                ...test,
+
+                raw: {
                   id,
+                  ...test,
+                },
+              })
+            );
+        }
+
+        /* ==============================================
+           ARRAY FORMAT
+        ============================================== */
+
+        else if (Array.isArray(data)) {
+          loadedTests =
+            data
+              .map((test, index) => {
+                if (!test) return null;
+
+                return {
+                  id:
+                    test.id ||
+                    String(index),
 
                   ...test,
 
                   raw: {
-                    id,
+                    id:
+                      test.id ||
+                      String(index),
+
                     ...test,
                   },
-                })
-              );
-          }
-
-          /* ==========================================
-             ARRAY FORMAT
-          ========================================== */
-
-          else if (
-            Array.isArray(data)
-          ) {
-            loadedTests =
-              data
-                .map(
-                  (
-                    test,
-                    index
-                  ) => {
-                    if (!test) {
-                      return null;
-                    }
-
-                    return {
-                      id:
-                        test.id ||
-                        String(index),
-
-                      ...test,
-
-                      raw: {
-                        id:
-                          test.id ||
-                          String(index),
-
-                        ...test,
-                      },
-                    };
-                  }
-                )
-                .filter(Boolean);
-          }
-
-          console.log(
-            "TEST SERIES: Total tests:",
-            loadedTests.length
-          );
-
-          /* ==========================================
-             PUBLIC TESTS
-          ========================================== */
-
-          const publicTests =
-            loadedTests.filter(
-              (test) =>
-                isTestPublic(test)
-            );
-
-          /* ==========================================
-             SORT TEST NUMBER
-          ========================================== */
-
-          publicTests.sort(
-            (a, b) => {
-              const aNo =
-                Number(
-                  a.testNumber ??
-                    a.testNo ??
-                    a.number ??
-                    999999
-                );
-
-              const bNo =
-                Number(
-                  b.testNumber ??
-                    b.testNo ??
-                    b.number ??
-                    999999
-                );
-
-              return aNo - bNo;
-            }
-          );
-
-          setTests(
-            publicTests
-          );
-        } catch (err) {
-          console.error(
-            "TEST SERIES LOAD ERROR:",
-            err
-          );
-
-          if (mounted) {
-            setError(
-              err?.message ||
-                "Test Series load नहीं हो सकी।"
-            );
-          }
-        } finally {
-          if (mounted) {
-            setLoading(false);
-          }
+                };
+              })
+              .filter(Boolean);
         }
-      };
+
+        console.log(
+          "TEST SERIES: Total tests:",
+          loadedTests.length
+        );
+
+        /* ==============================================
+           PUBLIC FILTER
+        ============================================== */
+
+        const publicTests =
+          loadedTests.filter(
+            (test) =>
+              isTestPublic(test)
+          );
+
+        /* ==============================================
+           SORT
+        ============================================== */
+
+        publicTests.sort(
+          (a, b) => {
+            const aNo = Number(
+              a.testNumber ??
+                a.testNo ??
+                a.number ??
+                999999
+            );
+
+            const bNo = Number(
+              b.testNumber ??
+                b.testNo ??
+                b.number ??
+                999999
+            );
+
+            return aNo - bNo;
+          }
+        );
+
+        setTests(
+          publicTests
+        );
+      } catch (err) {
+        console.error(
+          "TEST SERIES LOAD ERROR:",
+          err
+        );
+
+        if (mounted) {
+          setError(
+            err?.message ||
+              "Test Series load नहीं हो सकी।"
+          );
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
 
     loadTests();
 
@@ -445,12 +310,26 @@ export default function TestSeries({
   }, []);
 
   /* ====================================================
-     START TEST
+     CHECK ATTEMPT
   ==================================================== */
 
-  const handleStart = (
-    test
-  ) => {
+  const hasAttempted = (test) => {
+    try {
+      return (
+        localStorage.getItem(
+          getAttemptKey(test)
+        ) === "true"
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  /* ====================================================
+     START / RE-ATTEMPT
+  ==================================================== */
+
+  const handleStart = (test) => {
     console.log(
       "START / RE-ATTEMPT TEST:",
       test
@@ -484,7 +363,6 @@ export default function TestSeries({
         examId:
           test.examId ||
           test.exam ||
-          test.examName ||
           "",
 
         testNo:
@@ -503,12 +381,23 @@ export default function TestSeries({
           getDuration(test),
 
         questions:
-          test.questions ||
-          [],
+          test.questions || [],
+
+        marksPerQuestion:
+          test.marksPerQuestion ??
+          test.marks ??
+          1,
+
+        negativeMarking:
+          test.negativeMarking ??
+          false,
+
+        negativeMarks:
+          test.negativeMarks ??
+          0,
 
         raw:
-          test.raw ||
-          test,
+          test.raw || test,
       });
     } else {
       console.error(
@@ -576,16 +465,11 @@ export default function TestSeries({
 
         <div
           style={{
-            padding:
-              "20px",
-            marginTop:
-              "20px",
-            background:
-              "#fee2e2",
-            borderRadius:
-              "12px",
-            color:
-              "#991b1b",
+            padding: "20px",
+            marginTop: "20px",
+            background: "#fee2e2",
+            borderRadius: "12px",
+            color: "#991b1b",
           }}
         >
           <strong>
@@ -633,16 +517,22 @@ export default function TestSeries({
           style={{
             marginTop:
               "30px",
+
             padding:
               "30px 20px",
+
             textAlign:
               "center",
+
             background:
               "#ffffff",
+
             border:
               "1px solid #e5e7eb",
+
             borderRadius:
               "16px",
+
             boxShadow:
               "0 4px 15px rgba(0,0,0,0.06)",
           }}
@@ -731,20 +621,25 @@ export default function TestSeries({
         </p>
       </div>
 
-      {/* TEST COUNT */}
+      {/* COUNT */}
 
       <div
         style={{
           marginBottom:
             "20px",
+
           padding:
             "12px 16px",
+
           background:
             "#eff6ff",
+
           borderRadius:
             "10px",
+
           color:
             "#1d4ed8",
+
           fontWeight:
             "700",
         }}
@@ -753,21 +648,19 @@ export default function TestSeries({
         {tests.length}
       </div>
 
-      {/* TEST LIST */}
+      {/* LIST */}
 
       <div
         style={{
           display:
             "grid",
+
           gap:
             "18px",
         }}
       >
         {tests.map(
-          (
-            test,
-            index
-          ) => {
+          (test, index) => {
             const questionCount =
               getQuestionsCount(
                 test
@@ -782,9 +675,7 @@ export default function TestSeries({
             const title =
               test.title ||
               test.name ||
-              `Test ${
-                index + 1
-              }`;
+              `Test ${index + 1}`;
 
             const exam =
               test.exam ||
@@ -798,14 +689,8 @@ export default function TestSeries({
               test.number ??
               index + 1;
 
-            /* =========================================
-               ATTEMPT STATUS
-            ========================================= */
-
             const attempted =
-              isTestAttempted(
-                test
-              );
+              hasAttempted(test);
 
             return (
               <div
@@ -816,12 +701,16 @@ export default function TestSeries({
                 style={{
                   background:
                     "#ffffff",
+
                   border:
                     "1px solid #dbe4ee",
+
                   borderRadius:
                     "18px",
+
                   padding:
                     "20px",
+
                   boxShadow:
                     "0 4px 16px rgba(15,23,42,0.06)",
                 }}
@@ -832,8 +721,10 @@ export default function TestSeries({
                   style={{
                     margin:
                       "0 0 12px",
+
                     color:
                       "#0f2747",
+
                     fontSize:
                       "22px",
                   }}
@@ -847,8 +738,10 @@ export default function TestSeries({
                   style={{
                     margin:
                       "8px 0",
+
                     color:
                       "#64748b",
+
                     fontSize:
                       "16px",
                   }}
@@ -865,8 +758,10 @@ export default function TestSeries({
                   style={{
                     margin:
                       "8px 0",
+
                     color:
                       "#64748b",
+
                     fontSize:
                       "16px",
                   }}
@@ -893,8 +788,10 @@ export default function TestSeries({
                   style={{
                     margin:
                       "8px 0 12px",
+
                     color:
                       "#64748b",
+
                     fontSize:
                       "16px",
                   }}
@@ -911,22 +808,29 @@ export default function TestSeries({
                   style={{
                     display:
                       "inline-block",
+
                     padding:
                       "6px 14px",
+
                     background:
                       attempted
-                        ? "#fef3c7"
+                        ? "#dbeafe"
                         : "#dcfce7",
+
                     color:
                       attempted
-                        ? "#92400e"
+                        ? "#1d4ed8"
                         : "#15803d",
+
                     borderRadius:
                       "999px",
+
                     fontWeight:
                       "800",
+
                     fontSize:
                       "14px",
+
                     marginBottom:
                       "15px",
                   }}
@@ -936,7 +840,7 @@ export default function TestSeries({
                     : "PUBLIC"}
                 </div>
 
-                {/* START / REATTEMPT BUTTON */}
+                {/* START / RE-ATTEMPT */}
 
                 <button
                   type="button"
@@ -948,28 +852,36 @@ export default function TestSeries({
                   style={{
                     width:
                       "100%",
+
                     padding:
                       "13px 18px",
+
                     border:
                       "none",
+
                     borderRadius:
                       "10px",
+
                     background:
                       attempted
-                        ? "#f59e0b"
+                        ? "#2563eb"
                         : "#087bea",
+
                     color:
                       "#ffffff",
+
                     fontSize:
                       "17px",
+
                     fontWeight:
                       "800",
+
                     cursor:
                       "pointer",
                   }}
                 >
                   {attempted
-                    ? "🔄 Re-Attempt करें"
+                    ? "🔄 Re-attempt करें"
                     : "▶️ Test Start करें"}
                 </button>
               </div>
