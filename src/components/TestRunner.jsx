@@ -4,24 +4,31 @@ import React, {
   useState,
 } from "react";
 
-/* ======================================================
-   LOCAL QUESTION FOLDERS
-====================================================== */
+// ======================================================
+// LOCAL QUESTION FOLDERS — FALLBACK
+// ======================================================
 
 const EXAM_FOLDERS = {
   upsc: "upsc",
   uppcs: "uppcs",
   uppet: "uppet",
   upsssc: "upsssc",
+
   "ro-aro": "ro-aro",
   roaro: "ro-aro",
+
   bpsc: "bpsc",
   mppsc: "mppsc",
+
   ssc: "ssc",
   railway: "railway",
   police: "police",
   teaching: "teaching",
 };
+
+// ======================================================
+// LOCAL QUESTION MODULES
+// ======================================================
 
 const TEST_MODULES = import.meta.glob(
   "../data/questions/*/test*.js",
@@ -30,9 +37,9 @@ const TEST_MODULES = import.meta.glob(
   }
 );
 
-/* ======================================================
-   LOCAL QUESTIONS
-====================================================== */
+// ======================================================
+// LOCAL QUESTIONS
+// ======================================================
 
 function getLocalQuestions(
   examId,
@@ -60,11 +67,16 @@ function getLocalQuestions(
   );
 }
 
-/* ======================================================
-   GET QUESTIONS
-====================================================== */
+// ======================================================
+// GET QUESTIONS
+// Firebase → Local fallback
+// ======================================================
 
 function getQuestions(test) {
+  // ----------------------------------------------------
+  // 1. Firebase Array
+  // ----------------------------------------------------
+
   if (
     Array.isArray(
       test?.questions
@@ -76,6 +88,10 @@ function getQuestions(test) {
       150
     );
   }
+
+  // ----------------------------------------------------
+  // 2. Firebase Object
+  // ----------------------------------------------------
 
   if (
     test?.questions &&
@@ -98,33 +114,40 @@ function getQuestions(test) {
     }
   }
 
+  // ----------------------------------------------------
+  // 3. Local JS fallback
+  // ----------------------------------------------------
+
   return getLocalQuestions(
     test?.examId ||
-      test?.exam,
-    test?.testNumber ||
-      test?.testNo
+      test?.exam ||
+      test?.examName,
+    test?.testNumber ??
+      test?.testNo ??
+      test?.number ??
+      1
   ).slice(0, 150);
 }
 
-/* ======================================================
-   OPTIONS
-====================================================== */
+// ======================================================
+// OPTIONS
+// ======================================================
 
 function getOptions(q) {
+  // ----------------------------------------------------
+  // Array format
+  // ----------------------------------------------------
+
   if (
     Array.isArray(
       q?.options
     )
   ) {
     return q.options.map(
-      (
-        value,
-        index
-      ) => ({
-        key:
-          String.fromCharCode(
-            65 + index
-          ),
+      (value, index) => ({
+        key: String.fromCharCode(
+          65 + index
+        ),
 
         value:
           typeof value ===
@@ -136,6 +159,10 @@ function getOptions(q) {
       })
     );
   }
+
+  // ----------------------------------------------------
+  // Object format
+  // ----------------------------------------------------
 
   if (
     q?.options &&
@@ -145,11 +172,13 @@ function getOptions(q) {
     return Object.entries(
       q.options
     ).map(
-      ([key, value]) => ({
+      (
+        [key, value],
+        index
+      ) => ({
         key:
-          String(
-            key
-          ).toUpperCase(),
+          String(key)
+            .toUpperCase(),
 
         value:
           typeof value ===
@@ -158,6 +187,8 @@ function getOptions(q) {
               value?.text ??
               ""
             : value,
+
+        index,
       })
     );
   }
@@ -165,26 +196,36 @@ function getOptions(q) {
   return [];
 }
 
-/* ======================================================
-   NORMALIZE ANSWER
-====================================================== */
+// ======================================================
+// ANSWER NORMALIZATION
+// ======================================================
 
-function normalizeAnswer(
-  value
-) {
+function normalizeAnswer(value) {
   if (
-    value ===
-      undefined ||
+    value === undefined ||
     value === null ||
     value === ""
   ) {
     return "";
   }
 
+  // ----------------------------------------------------
+  // Number answer
+  // ----------------------------------------------------
+
   if (
     typeof value ===
     "number"
   ) {
+    /*
+      0,1,2,3
+      = A,B,C,D
+
+      लेकिन 1,2,3,4 format को
+      नीचे string/object handling में
+      भी support किया गया है।
+    */
+
     if (
       value >= 0 &&
       value <= 3
@@ -205,12 +246,15 @@ function normalizeAnswer(
   }
 
   const text =
-    String(value)
-      .trim();
+    String(value).trim();
 
   if (!text) {
     return "";
   }
+
+  // ----------------------------------------------------
+  // A / B / C / D
+  // ----------------------------------------------------
 
   const letter =
     text.match(
@@ -221,6 +265,10 @@ function normalizeAnswer(
     return letter[1].toUpperCase();
   }
 
+  // ----------------------------------------------------
+  // A) Answer
+  // ----------------------------------------------------
+
   const letterWithText =
     text.match(
       /^([A-Da-d])\s*[).:\-]\s*/
@@ -230,20 +278,20 @@ function normalizeAnswer(
     return letterWithText[1].toUpperCase();
   }
 
+  // ----------------------------------------------------
+  // Numeric string
+  // ----------------------------------------------------
+
   if (
     /^\d+$/.test(text)
   ) {
     const n =
       Number(text);
 
-    if (
-      n >= 0 &&
-      n <= 3
-    ) {
-      return String.fromCharCode(
-        65 + n
-      );
-    }
+    /*
+      String "1","2","3","4"
+      को A,B,C,D माना जाएगा।
+    */
 
     if (
       n >= 1 &&
@@ -253,16 +301,34 @@ function normalizeAnswer(
         64 + n
       );
     }
+
+    /*
+      String "0","1","2","3"
+      में 0 को A माना जाएगा।
+    */
+
+    if (
+      n >= 0 &&
+      n <= 3
+    ) {
+      return String.fromCharCode(
+        65 + n
+      );
+    }
   }
+
+  // ----------------------------------------------------
+  // Text answer
+  // ----------------------------------------------------
 
   return text
     .toLowerCase()
     .trim();
 }
 
-/* ======================================================
-   GET ANSWER
-====================================================== */
+// ======================================================
+// GET CORRECT ANSWER
+// ======================================================
 
 function getAnswer(q) {
   return (
@@ -275,9 +341,62 @@ function getAnswer(q) {
   );
 }
 
-/* ======================================================
-   CHECK CORRECT
-====================================================== */
+// ======================================================
+// GET EXPLANATION
+// ======================================================
+
+function getExplanation(q) {
+  return (
+    q?.explanation ??
+    q?.व्याख्या ??
+    q?.explanationText ??
+    q?.solution ??
+    q?.details ??
+    "इस प्रश्न की व्याख्या उपलब्ध नहीं है।"
+  );
+}
+
+// ======================================================
+// GET IMPORTANT FACTS
+// ======================================================
+
+function getImportantFacts(q) {
+  if (
+    Array.isArray(
+      q?.importantFacts
+    )
+  ) {
+    return q.importantFacts;
+  }
+
+  if (
+    Array.isArray(
+      q?.महत्वपूर्णतथ्य
+    )
+  ) {
+    return q.महत्वपूर्णतथ्य;
+  }
+
+  return [];
+}
+
+// ======================================================
+// GET EXAM TRICK
+// ======================================================
+
+function getExamTrick(q) {
+  return (
+    q?.examTrick ??
+    q?.exam_trick ??
+    q?.ExamTrick ??
+    q?.परीक्षाट्रिक ??
+    ""
+  );
+}
+
+// ======================================================
+// CHECK ANSWER
+// ======================================================
 
 function isCorrect(
   q,
@@ -300,12 +419,20 @@ function isCorrect(
     return false;
   }
 
+  // ----------------------------------------------------
+  // Direct A/B/C/D match
+  // ----------------------------------------------------
+
   if (
     correct ===
     userAnswer
   ) {
     return true;
   }
+
+  // ----------------------------------------------------
+  // Text comparison
+  // ----------------------------------------------------
 
   const options =
     getOptions(q);
@@ -315,8 +442,7 @@ function isCorrect(
       (option) =>
         normalizeAnswer(
           option.key
-        ) ===
-        userAnswer
+        ) === userAnswer
     );
 
   const correctOption =
@@ -324,8 +450,7 @@ function isCorrect(
       (option) =>
         normalizeAnswer(
           option.key
-        ) ===
-        correct
+        ) === correct
     );
 
   if (
@@ -349,83 +474,107 @@ function isCorrect(
   return false;
 }
 
-/* ======================================================
-   ATTEMPT KEY
-====================================================== */
+// ======================================================
+// GET CORRECT OPTION
+// ======================================================
 
-function getAttemptKey(test) {
-  return `test_attempted_${String(
-    test?.id ??
-      test?.testId ??
-      `${test?.examId || test?.exam || "general"}_${test?.testNumber || test?.testNo || 1}`
-  )}`;
+function getCorrectOption(
+  q
+) {
+  const options =
+    getOptions(q);
+
+  const correct =
+    normalizeAnswer(
+      getAnswer(q)
+    );
+
+  return options.find(
+    (option) =>
+      normalizeAnswer(
+        option.key
+      ) === correct
+  );
 }
 
-/* ======================================================
-   TEST RUNNER
-====================================================== */
+// ======================================================
+// TEST RUNNER
+// ======================================================
 
 export default function TestRunner({
   test,
   onBack,
 }) {
-  /* ====================================================
-     QUESTIONS
-  ==================================================== */
+  // ====================================================
+  // QUESTIONS
+  // ====================================================
 
-  const questions =
-    useMemo(
-      () =>
-        getQuestions(test),
-      [test]
-    );
+  const questions = useMemo(
+    () =>
+      getQuestions(test),
+    [test]
+  );
 
-  /* ====================================================
-     STATE
-  ==================================================== */
+  // ====================================================
+  // STATE
+  // ====================================================
+
+  const [current, setCurrent] =
+    useState(0);
+
+  const [answers, setAnswers] =
+    useState({});
+
+  const [finished, setFinished] =
+    useState(false);
+
+  /*
+    IMPORTANT:
+    Re-attempt mode
+  */
 
   const [
-    current,
-    setCurrent,
-  ] = useState(0);
-
-  const [
-    answers,
-    setAnswers,
-  ] = useState({});
-
-  const [
-    finished,
-    setFinished,
+    isReattempt,
+    setIsReattempt,
   ] = useState(false);
+
+  // ====================================================
+  // DURATION
+  // ====================================================
 
   const durationMinutes =
     Number(
       test?.durationMinutes ??
         test?.duration ??
+        test?.timeLimit ??
+        test?.time ??
         30
     );
 
-  const [
-    timeLeft,
-    setTimeLeft,
-  ] = useState(
-    durationMinutes *
-      60
-  );
+  // ====================================================
+  // TIMER
+  // ====================================================
 
-  /* ====================================================
-     RESET
-  ==================================================== */
+  const [timeLeft, setTimeLeft] =
+    useState(
+      durationMinutes * 60
+    );
+
+  // ====================================================
+  // RESET WHEN NEW TEST OPENS
+  // ====================================================
 
   useEffect(() => {
     setCurrent(0);
+
     setAnswers({});
+
     setFinished(false);
 
+    setIsReattempt(false);
+
     setTimeLeft(
-      durationMinutes *
-        60
+      durationMinutes * 60
     );
 
     window.scrollTo({
@@ -439,9 +588,9 @@ export default function TestRunner({
     durationMinutes,
   ]);
 
-  /* ====================================================
-     TIMER
-  ==================================================== */
+  // ====================================================
+  // TIMER
+  // ====================================================
 
   useEffect(() => {
     if (
@@ -462,9 +611,7 @@ export default function TestRunner({
                 timer
               );
 
-              setFinished(
-                true
-              );
+              setFinished(true);
 
               return 0;
             }
@@ -477,39 +624,34 @@ export default function TestRunner({
       }, 1000);
 
     return () =>
-      clearInterval(
-        timer
-      );
+      clearInterval(timer);
   }, [
     finished,
     questions.length,
   ]);
 
-  /* ====================================================
-     SCORE
-  ==================================================== */
+  // ====================================================
+  // SCORE
+  // ====================================================
 
   const scoreData =
     useMemo(() => {
       let correct = 0;
+
       let wrong = 0;
+
       let unanswered = 0;
 
       questions.forEach(
-        (
-          q,
-          index
-        ) => {
+        (q, index) => {
           const selected =
             answers[index];
 
           if (
             selected ===
               undefined ||
-            selected ===
-              null ||
-            selected ===
-              ""
+            selected === null ||
+            selected === ""
           ) {
             unanswered++;
           } else if (
@@ -541,8 +683,7 @@ export default function TestRunner({
           : 0;
 
       const score =
-        correct *
-          marks -
+        correct * marks -
         wrong *
           negativeMarks;
 
@@ -567,9 +708,9 @@ export default function TestRunner({
       test,
     ]);
 
-  /* ====================================================
-     SELECT ANSWER
-  ==================================================== */
+  // ====================================================
+  // SELECT ANSWER
+  // ====================================================
 
   const choose = (
     value
@@ -581,38 +722,16 @@ export default function TestRunner({
     setAnswers(
       (previous) => ({
         ...previous,
+
         [current]:
           value,
       })
     );
   };
 
-  /* ====================================================
-     SAVE ATTEMPT
-  ==================================================== */
-
-  const saveAttempt = () => {
-    try {
-      localStorage.setItem(
-        getAttemptKey(test),
-        "true"
-      );
-
-      console.log(
-        "TEST ATTEMPT SAVED:",
-        getAttemptKey(test)
-      );
-    } catch (error) {
-      console.error(
-        "Attempt save error:",
-        error
-      );
-    }
-  };
-
-  /* ====================================================
-     SUBMIT
-  ==================================================== */
+  // ====================================================
+  // SUBMIT TEST
+  // ====================================================
 
   const submitTest = () => {
     if (
@@ -620,11 +739,7 @@ export default function TestRunner({
         "क्या आप Test Submit करना चाहते हैं?"
       )
     ) {
-      saveAttempt();
-
-      setFinished(
-        true
-      );
+      setFinished(true);
 
       window.scrollTo({
         top: 0,
@@ -633,11 +748,21 @@ export default function TestRunner({
     }
   };
 
-  /* ====================================================
-     RESTART
-  ==================================================== */
+  // ====================================================
+  // RE-ATTEMPT
+  // ====================================================
 
   const restartTest = () => {
+    /*
+      Re-attempt mode ON
+    */
+
+    setIsReattempt(true);
+
+    /*
+      नया attempt
+    */
+
     setCurrent(0);
 
     setAnswers({});
@@ -645,8 +770,7 @@ export default function TestRunner({
     setFinished(false);
 
     setTimeLeft(
-      durationMinutes *
-        60
+      durationMinutes * 60
     );
 
     window.scrollTo({
@@ -655,9 +779,9 @@ export default function TestRunner({
     });
   };
 
-  /* ====================================================
-     TIMER FORMAT
-  ==================================================== */
+  // ====================================================
+  // TIMER FORMAT
+  // ====================================================
 
   const formatTime = (
     seconds
@@ -670,16 +794,18 @@ export default function TestRunner({
         .padStart(2, "0");
 
     const secs =
-      (seconds % 60)
+      (
+        seconds % 60
+      )
         .toString()
         .padStart(2, "0");
 
     return `${minutes}:${secs}`;
   };
 
-  /* ====================================================
-     NO QUESTIONS
-  ==================================================== */
+  // ====================================================
+  // NO QUESTIONS
+  // ====================================================
 
   if (
     !questions.length
@@ -730,21 +856,23 @@ export default function TestRunner({
     );
   }
 
-  /* ====================================================
-     RESULT PAGE
-  ==================================================== */
+  // ====================================================
+  // RESULT PAGE
+  // ====================================================
 
   if (finished) {
     return (
       <main className="ai-container">
+
         <div className="ai-card">
 
-          {/* HEADER */}
+          {/* RESULT HEADER */}
 
           <div
             style={{
               textAlign:
                 "center",
+
               padding:
                 "10px 5px 25px",
             }}
@@ -771,7 +899,6 @@ export default function TestRunner({
             <h2>
               {test?.examTitle ||
                 test?.examName ||
-                test?.exam ||
                 ""}{" "}
               —{" "}
               {test?.title ||
@@ -853,6 +980,8 @@ export default function TestRunner({
             }}
           >
 
+            {/* CORRECT */}
+
             <div
               style={{
                 padding:
@@ -868,6 +997,7 @@ export default function TestRunner({
                   "center",
               }}
             >
+
               <b>
                 ✅ सही
               </b>
@@ -882,7 +1012,10 @@ export default function TestRunner({
                   scoreData.correct
                 }
               </div>
+
             </div>
+
+            {/* WRONG */}
 
             <div
               style={{
@@ -899,6 +1032,7 @@ export default function TestRunner({
                   "center",
               }}
             >
+
               <b>
                 ❌ गलत
               </b>
@@ -913,7 +1047,10 @@ export default function TestRunner({
                   scoreData.wrong
                 }
               </div>
+
             </div>
+
+            {/* UNANSWERED */}
 
             <div
               style={{
@@ -930,6 +1067,7 @@ export default function TestRunner({
                   "center",
               }}
             >
+
               <b>
                 ⚪ छोड़े
               </b>
@@ -944,6 +1082,7 @@ export default function TestRunner({
                   scoreData.unanswered
                 }
               </div>
+
             </div>
 
           </div>
@@ -955,10 +1094,8 @@ export default function TestRunner({
           </h2>
 
           {questions.map(
-            (
-              q,
-              i
-            ) => {
+            (q, i) => {
+
               const options =
                 getOptions(q);
 
@@ -974,9 +1111,7 @@ export default function TestRunner({
 
               const selectedOption =
                 options.find(
-                  (
-                    option
-                  ) =>
+                  (option) =>
                     normalizeAnswer(
                       option.key
                     ) ===
@@ -985,9 +1120,7 @@ export default function TestRunner({
 
               const correctOption =
                 options.find(
-                  (
-                    option
-                  ) =>
+                  (option) =>
                     normalizeAnswer(
                       option.key
                     ) ===
@@ -995,30 +1128,13 @@ export default function TestRunner({
                 );
 
               const explanation =
-                q?.explanation ??
-                q?.व्याख्या ??
-                q?.explanationText ??
-                q?.solution ??
-                q?.details ??
-                "इस प्रश्न की व्याख्या उपलब्ध नहीं है।";
+                getExplanation(q);
 
               const importantFacts =
-                Array.isArray(
-                  q?.importantFacts
-                )
-                  ? q.importantFacts
-                  : Array.isArray(
-                      q?.महत्वपूर्णतथ्य
-                    )
-                  ? q.महत्वपूर्णतथ्य
-                  : [];
+                getImportantFacts(q);
 
               const examTrick =
-                q?.examTrick ??
-                q?.exam_trick ??
-                q?.ExamTrick ??
-                q?.परीक्षाट्रिक ??
-                "";
+                getExamTrick(q);
 
               const correctAnswer =
                 isCorrect(
@@ -1074,6 +1190,7 @@ export default function TestRunner({
                         8,
                     }}
                   >
+
                     <strong>
                       आपका उत्तर:
                     </strong>{" "}
@@ -1081,6 +1198,7 @@ export default function TestRunner({
                     {selectedOption
                       ? `${selectedOption.key}) ${selectedOption.value}`
                       : "नहीं दिया"}
+
                   </div>
 
                   {/* CORRECT ANSWER */}
@@ -1088,22 +1206,31 @@ export default function TestRunner({
                   <div
                     style={{
                       marginTop:
-                        6,
+                        8,
+
+                      padding:
+                        "10px 12px",
+
+                      borderRadius:
+                        10,
+
+                      background:
+                        "#ecfdf5",
 
                       color:
                         "#15803d",
                     }}
                   >
+
                     <strong>
-                      सही उत्तर:
+                      ✅ सही उत्तर:
                     </strong>{" "}
 
                     {correctOption
                       ? `${correctOption.key}) ${correctOption.value}`
-                      : getAnswer(
-                          q
-                        ) ||
+                      : getAnswer(q) ||
                         "उपलब्ध नहीं"}
+
                   </div>
 
                   {/* STATUS */}
@@ -1111,18 +1238,20 @@ export default function TestRunner({
                   <div
                     style={{
                       marginTop:
-                        8,
+                        10,
 
                       fontWeight:
                         800,
                     }}
                   >
+
                     {answers[i] ===
                     undefined
                       ? "⚪ अनुत्तरित"
                       : correctAnswer
                       ? "✅ सही उत्तर"
                       : "❌ गलत उत्तर"}
+
                   </div>
 
                   {/* EXPLANATION */}
@@ -1214,6 +1343,7 @@ export default function TestRunner({
                             24,
                         }}
                       >
+
                         {importantFacts.map(
                           (
                             fact,
@@ -1228,12 +1358,11 @@ export default function TestRunner({
                                   4,
                               }}
                             >
-                              {
-                                fact
-                              }
+                              {fact}
                             </li>
                           )
                         )}
+
                       </ul>
 
                     </div>
@@ -1280,9 +1409,7 @@ export default function TestRunner({
                       </div>
 
                       <div>
-                        {
-                          examTrick
-                        }
+                        {examTrick}
                       </div>
 
                     </div>
@@ -1313,6 +1440,8 @@ export default function TestRunner({
             }}
           >
 
+            {/* RE-ATTEMPT */}
+
             <button
               type="button"
               className="ai-button"
@@ -1323,12 +1452,12 @@ export default function TestRunner({
               🔄 Test दोबारा दें
             </button>
 
+            {/* BACK */}
+
             <button
               type="button"
               className="ai-button"
-              onClick={
-                onBack
-              }
+              onClick={onBack}
             >
               ← Test List
             </button>
@@ -1336,13 +1465,14 @@ export default function TestRunner({
           </div>
 
         </div>
+
       </main>
     );
   }
 
-  /* ====================================================
-     CURRENT QUESTION
-  ==================================================== */
+  // ====================================================
+  // CURRENT QUESTION
+  // ====================================================
 
   const question =
     questions[current];
@@ -1357,28 +1487,61 @@ export default function TestRunner({
       answers[current]
     );
 
-  /* ====================================================
-     TEST PAGE
-  ==================================================== */
+  // ====================================================
+  // CURRENT CORRECT ANSWER
+  // ====================================================
+
+  const correctAnswer =
+    normalizeAnswer(
+      getAnswer(
+        question
+      )
+    );
+
+  const correctOption =
+    getCorrectOption(
+      question
+    );
+
+  const explanation =
+    getExplanation(
+      question
+    );
+
+  const importantFacts =
+    getImportantFacts(
+      question
+    );
+
+  const examTrick =
+    getExamTrick(
+      question
+    );
+
+  // ====================================================
+  // TEST PAGE
+  // ====================================================
 
   return (
     <main className="ai-container">
 
       <div className="ai-card">
 
-        {/* BACK */}
+        {/* ==================================================
+            BACK BUTTON
+        ================================================== */}
 
         <button
           type="button"
           className="ai-button"
-          onClick={
-            onBack
-          }
+          onClick={onBack}
         >
           ← Test Series
         </button>
 
-        {/* HEADER */}
+        {/* ==================================================
+            HEADER
+        ================================================== */}
 
         <div
           style={{
@@ -1423,8 +1586,40 @@ export default function TestRunner({
               }}
             >
               {test?.title ||
+                test?.name ||
                 "Test"}
             </h2>
+
+            {/* RE-ATTEMPT LABEL */}
+
+            {isReattempt && (
+              <div
+                style={{
+                  display:
+                    "inline-block",
+
+                  padding:
+                    "6px 12px",
+
+                  borderRadius:
+                    999,
+
+                  background:
+                    "#fff7ed",
+
+                  color:
+                    "#c2410c",
+
+                  fontWeight:
+                    800,
+
+                  fontSize:
+                    14,
+                }}
+              >
+                🔄 Re-Attempt Mode
+              </div>
+            )}
 
           </div>
 
@@ -1456,7 +1651,9 @@ export default function TestRunner({
 
         </div>
 
-        {/* QUESTION AREA */}
+        {/* ==================================================
+            QUESTION AREA
+        ================================================== */}
 
         <div
           style={{
@@ -1477,7 +1674,7 @@ export default function TestRunner({
           }}
         >
 
-          {/* HEADER */}
+          {/* QUESTION HEADER */}
 
           <div
             style={{
@@ -1560,7 +1757,9 @@ export default function TestRunner({
 
           </div>
 
-          {/* QUESTION */}
+          {/* ==================================================
+              QUESTION
+          ================================================== */}
 
           <h2
             style={{
@@ -1572,20 +1771,19 @@ export default function TestRunner({
             }}
           >
             {current + 1}.{" "}
-            {
-              question?.question
-            }
+            {question?.question}
           </h2>
 
-          {/* OPTIONS */}
+          {/* ==================================================
+              OPTIONS
+          ================================================== */}
 
           <div
             style={{
               display:
                 "grid",
 
-              gap:
-                12,
+              gap: 12,
 
               marginTop:
                 18,
@@ -1593,14 +1791,25 @@ export default function TestRunner({
           >
 
             {options.map(
-              (
-                option
-              ) => {
+              (option) => {
+
                 const active =
                   selected ===
                   normalizeAnswer(
                     option.key
                   );
+
+                const isCorrectOption =
+                  isReattempt &&
+                  normalizeAnswer(
+                    option.key
+                  ) ===
+                    correctAnswer;
+
+                const isWrongSelected =
+                  isReattempt &&
+                  active &&
+                  !isCorrectOption;
 
                 return (
                   <button
@@ -1635,12 +1844,20 @@ export default function TestRunner({
                         12,
 
                       border:
-                        active
+                        isCorrectOption
+                          ? "2px solid #16a34a"
+                          : isWrongSelected
+                          ? "2px solid #dc2626"
+                          : active
                           ? "2px solid #2563eb"
                           : "1px solid #cbd5e1",
 
                       background:
-                        active
+                        isCorrectOption
+                          ? "#dcfce7"
+                          : isWrongSelected
+                          ? "#fee2e2"
+                          : active
                           ? "#eff6ff"
                           : "#fff",
 
@@ -1672,7 +1889,8 @@ export default function TestRunner({
                     >
                       {
                         option.key
-                      })
+                      }
+                      )
                     </strong>
 
                     <span
@@ -1689,6 +1907,38 @@ export default function TestRunner({
                       }
                     </span>
 
+                    {/* CORRECT ICON */}
+
+                    {isCorrectOption && (
+                      <span
+                        style={{
+                          fontWeight:
+                            900,
+
+                          color:
+                            "#15803d",
+                        }}
+                      >
+                        ✓ सही
+                      </span>
+                    )}
+
+                    {/* WRONG ICON */}
+
+                    {isWrongSelected && (
+                      <span
+                        style={{
+                          fontWeight:
+                            900,
+
+                          color:
+                            "#dc2626",
+                        }}
+                      >
+                        ✕ गलत
+                      </span>
+                    )}
+
                   </button>
                 );
               }
@@ -1696,9 +1946,324 @@ export default function TestRunner({
 
           </div>
 
+          {/* ==================================================
+              RE-ATTEMPT:
+              CORRECT ANSWER + EXPLANATION
+          ================================================== */}
+
+          {isReattempt && (
+            <div
+              style={{
+                marginTop:
+                  22,
+
+                padding:
+                  18,
+
+                borderRadius:
+                  16,
+
+                background:
+                  "#ffffff",
+
+                border:
+                  "1px solid #dbe4ee",
+              }}
+            >
+
+              {/* CORRECT ANSWER */}
+
+              <div
+                style={{
+                  padding:
+                    15,
+
+                  borderRadius:
+                    12,
+
+                  background:
+                    "#ecfdf5",
+
+                  border:
+                    "1px solid #86efac",
+
+                  color:
+                    "#166534",
+
+                  lineHeight:
+                    1.7,
+                }}
+              >
+
+                <div
+                  style={{
+                    fontWeight:
+                      900,
+
+                    fontSize:
+                      17,
+
+                    marginBottom:
+                      6,
+                  }}
+                >
+                  ✅ सही उत्तर
+                </div>
+
+                <div>
+                  {correctOption
+                    ? `${correctOption.key}) ${correctOption.value}`
+                    : getAnswer(
+                        question
+                      ) ||
+                      "सही उत्तर उपलब्ध नहीं है"}
+                </div>
+
+              </div>
+
+              {/* USER ANSWER */}
+
+              <div
+                style={{
+                  marginTop:
+                    12,
+
+                  padding:
+                    15,
+
+                  borderRadius:
+                    12,
+
+                  background:
+                    selected
+                      ? isCorrect(
+                          question,
+                          selected
+                        )
+                        ? "#ecfdf5"
+                        : "#fef2f2"
+                      : "#f8fafc",
+
+                  border:
+                    selected
+                      ? isCorrect(
+                          question,
+                          selected
+                        )
+                        ? "1px solid #86efac"
+                        : "1px solid #fecaca"
+                      : "1px solid #cbd5e1",
+
+                  lineHeight:
+                    1.7,
+                }}
+              >
+
+                <div
+                  style={{
+                    fontWeight:
+                      900,
+
+                    marginBottom:
+                      6,
+                  }}
+                >
+                  {selected
+                    ? isCorrect(
+                        question,
+                        selected
+                      )
+                      ? "✅ आपका उत्तर सही है"
+                      : "❌ आपका उत्तर गलत है"
+                    : "⚪ आपने अभी उत्तर नहीं चुना"}
+                </div>
+
+                {selected && (
+                  <div>
+                    आपका उत्तर:{" "}
+                    {
+                      options.find(
+                        (option) =>
+                          normalizeAnswer(
+                            option.key
+                          ) ===
+                          selected
+                      )?.value
+                    }
+                  </div>
+                )}
+
+              </div>
+
+              {/* EXPLANATION */}
+
+              <div
+                style={{
+                  marginTop:
+                    14,
+
+                  padding:
+                    16,
+
+                  borderRadius:
+                    12,
+
+                  background:
+                    "#fff8e5",
+
+                  border:
+                    "1px solid #f1d58a",
+
+                  lineHeight:
+                    1.8,
+                }}
+              >
+
+                <div
+                  style={{
+                    fontWeight:
+                      900,
+
+                    marginBottom:
+                      7,
+
+                    fontSize:
+                      17,
+                  }}
+                >
+                  💡 व्याख्या
+                </div>
+
+                <div>
+                  {explanation}
+                </div>
+
+              </div>
+
+              {/* IMPORTANT FACTS */}
+
+              {importantFacts.length >
+                0 && (
+                <div
+                  style={{
+                    marginTop:
+                      14,
+
+                    padding:
+                      16,
+
+                    borderRadius:
+                      12,
+
+                    background:
+                      "#f8fafc",
+
+                    border:
+                      "1px solid #cbd5e1",
+
+                    lineHeight:
+                      1.8,
+                  }}
+                >
+
+                  <div
+                    style={{
+                      fontWeight:
+                        900,
+
+                      marginBottom:
+                        8,
+                    }}
+                  >
+                    📌 महत्वपूर्ण तथ्य
+                  </div>
+
+                  <ul
+                    style={{
+                      margin:
+                        0,
+
+                      paddingLeft:
+                        24,
+                    }}
+                  >
+
+                    {importantFacts.map(
+                      (
+                        fact,
+                        factIndex
+                      ) => (
+                        <li
+                          key={
+                            factIndex
+                          }
+                          style={{
+                            marginBottom:
+                              5,
+                          }}
+                        >
+                          {fact}
+                        </li>
+                      )
+                    )}
+
+                  </ul>
+
+                </div>
+              )}
+
+              {/* EXAM TRICK */}
+
+              {examTrick && (
+                <div
+                  style={{
+                    marginTop:
+                      14,
+
+                    padding:
+                      16,
+
+                    borderRadius:
+                      12,
+
+                    background:
+                      "#eef2ff",
+
+                    border:
+                      "1px solid #c7d2fe",
+
+                    lineHeight:
+                      1.8,
+                  }}
+                >
+
+                  <div
+                    style={{
+                      fontWeight:
+                        900,
+
+                      marginBottom:
+                        7,
+                    }}
+                  >
+                    🧠 Exam Trick
+                  </div>
+
+                  <div>
+                    {examTrick}
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          )}
+
         </div>
 
-        {/* NAVIGATION */}
+        {/* ==================================================
+            NAVIGATION
+        ================================================== */}
 
         <div
           style={{
@@ -1718,12 +2283,13 @@ export default function TestRunner({
           }}
         >
 
+          {/* PREVIOUS */}
+
           <button
             type="button"
             className="ai-button"
             disabled={
-              current ===
-              0
+              current === 0
             }
             onClick={() =>
               setCurrent(
@@ -1737,6 +2303,8 @@ export default function TestRunner({
           >
             ← पिछला
           </button>
+
+          {/* NEXT */}
 
           {current <
           questions.length -
