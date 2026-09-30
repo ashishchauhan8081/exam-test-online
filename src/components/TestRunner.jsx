@@ -1,4 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 // ======================================================
 // LOCAL QUESTION FOLDERS — FALLBACK
@@ -34,7 +38,10 @@ const TEST_MODULES = import.meta.glob(
 // LOCAL QUESTIONS
 // ======================================================
 
-function getLocalQuestions(examId, testNumber) {
+function getLocalQuestions(
+  examId,
+  testNumber
+) {
   const folder =
     EXAM_FOLDERS[examId] || examId;
 
@@ -61,7 +68,6 @@ function getLocalQuestions(examId, testNumber) {
 // ======================================================
 
 function getQuestions(test) {
-  // Firebase array
   if (
     Array.isArray(test?.questions) &&
     test.questions.length > 0
@@ -69,7 +75,6 @@ function getQuestions(test) {
     return test.questions.slice(0, 150);
   }
 
-  // Firebase object
   if (
     test?.questions &&
     typeof test.questions === "object"
@@ -87,7 +92,6 @@ function getQuestions(test) {
     }
   }
 
-  // Local fallback
   return getLocalQuestions(
     test?.examId,
     test?.testNumber
@@ -105,7 +109,6 @@ function getOptions(q) {
         key: String.fromCharCode(
           65 + index
         ),
-
         value:
           typeof value === "object"
             ? value?.value ??
@@ -126,14 +129,12 @@ function getOptions(q) {
       ([key, value], index) => ({
         key:
           String(key).toUpperCase(),
-
         value:
           typeof value === "object"
             ? value?.value ??
               value?.text ??
               ""
             : value,
-
         index,
       })
     );
@@ -155,11 +156,7 @@ function normalizeAnswer(value) {
     return "";
   }
 
-  // Number
   if (typeof value === "number") {
-    /*
-      पहले 0,1,2,3 को A,B,C,D
-    */
     if (
       value >= 0 &&
       value <= 3
@@ -169,9 +166,6 @@ function normalizeAnswer(value) {
       );
     }
 
-    /*
-      1,2,3,4 को A,B,C,D
-    */
     if (
       value >= 1 &&
       value <= 4
@@ -187,7 +181,6 @@ function normalizeAnswer(value) {
 
   if (!text) return "";
 
-  // A / B / C / D
   const letter =
     text.match(
       /^([A-Da-d])(?:[).:\-\s]|$)/
@@ -197,7 +190,6 @@ function normalizeAnswer(value) {
     return letter[1].toUpperCase();
   }
 
-  // B) Answer
   const letterWithText =
     text.match(
       /^([A-Da-d])\s*[).:\-]\s*/
@@ -207,7 +199,6 @@ function normalizeAnswer(value) {
     return letterWithText[1].toUpperCase();
   }
 
-  // Number string
   if (/^\d+$/.test(text)) {
     const n = Number(text);
 
@@ -254,7 +245,10 @@ function getAnswer(q) {
 // CHECK ANSWER
 // ======================================================
 
-function isCorrect(q, selected) {
+function isCorrect(
+  q,
+  selected
+) {
   const correct =
     normalizeAnswer(
       getAnswer(q)
@@ -270,7 +264,6 @@ function isCorrect(q, selected) {
     return false;
   }
 
-  // Direct A/B/C/D
   if (
     correct === userAnswer
   ) {
@@ -401,13 +394,7 @@ export default function TestRunner({
   const [finished, setFinished] =
     useState(false);
 
-  /*
-    ⭐ नया state
-
-    false = पहली बार Test
-
-    true = Test दोबारा / Re-attempt
-  */
+  // TRUE = RE-ATTEMPT
   const [isReattempt, setIsReattempt] =
     useState(false);
 
@@ -431,11 +418,6 @@ export default function TestRunner({
     setCurrent(0);
     setAnswers({});
     setFinished(false);
-
-    /*
-      नया Test खोलने पर
-      Re-attempt mode बंद रहेगा
-    */
     setIsReattempt(false);
 
     setTimeLeft(
@@ -603,17 +585,10 @@ export default function TestRunner({
   };
 
   // ====================================================
-  // RESTART / RE-ATTEMPT
+  // RE-ATTEMPT
   // ====================================================
 
   const restartTest = () => {
-    /*
-      ⭐ सबसे महत्वपूर्ण बदलाव
-
-      अब Restart के बाद
-      Re-attempt mode TRUE होगा।
-    */
-
     setIsReattempt(true);
 
     setCurrent(0);
@@ -757,22 +732,15 @@ export default function TestRunner({
               style={{
                 display:
                   "inline-block",
-
                 marginTop: 15,
-
                 padding:
                   "18px 30px",
-
                 borderRadius: 16,
-
                 background:
                   "#eafaf0",
-
                 color:
                   "#137333",
-
                 fontSize: 30,
-
                 fontWeight: 900,
               }}
             >
@@ -812,12 +780,9 @@ export default function TestRunner({
             style={{
               display:
                 "grid",
-
               gridTemplateColumns:
                 "repeat(auto-fit, minmax(130px, 1fr))",
-
               gap: 12,
-
               margin:
                 "20px 0",
             }}
@@ -894,7 +859,7 @@ export default function TestRunner({
 
           </div>
 
-          {/* EXPLANATION */}
+          {/* EXPLANATIONS */}
 
           <h2>
             📖 प्रश्नों की व्याख्या
@@ -1001,9 +966,7 @@ export default function TestRunner({
 
                     {correctOption
                       ? `${correctOption.key}) ${correctOption.value}`
-                      : getAnswer(
-                          q
-                        ) ||
+                      : getAnswer(q) ||
                         "उपलब्ध नहीं"}
                   </div>
 
@@ -1024,4 +987,835 @@ export default function TestRunner({
                   {/* EXPLANATION */}
 
                   <div
-   
+                    style={{
+                      marginTop: 14,
+                      padding: 15,
+                      borderRadius: 12,
+                      background:
+                        "#f8fafc",
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    <strong>
+                      📖 व्याख्या:
+                    </strong>
+
+                    <div
+                      style={{
+                        marginTop: 6,
+                        whiteSpace:
+                          "pre-wrap",
+                      }}
+                    >
+                      {explanation}
+                    </div>
+                  </div>
+
+                  {/* IMPORTANT FACTS */}
+
+                  {importantFacts.length >
+                    0 && (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 15,
+                        borderRadius: 12,
+                        background:
+                          "#eff6ff",
+                      }}
+                    >
+                      <strong>
+                        📌 महत्वपूर्ण तथ्य:
+                      </strong>
+
+                      <ul
+                        style={{
+                          marginTop: 8,
+                        }}
+                      >
+                        {importantFacts.map(
+                          (
+                            fact,
+                            index
+                          ) => (
+                            <li
+                              key={
+                                index
+                              }
+                              style={{
+                                marginBottom: 5,
+                              }}
+                            >
+                              {typeof fact ===
+                              "object"
+                                ? fact?.text ??
+                                  fact?.value ??
+                                  JSON.stringify(
+                                    fact
+                                  )
+                                : fact}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* EXAM TRICK */}
+
+                  {examTrick && (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: 15,
+                        borderRadius: 12,
+                        background:
+                          "#fff7ed",
+                      }}
+                    >
+                      <strong>
+                        💡 Exam Trick:
+                      </strong>
+
+                      <div
+                        style={{
+                          marginTop: 6,
+                          whiteSpace:
+                            "pre-wrap",
+                        }}
+                      >
+                        {examTrick}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              );
+            }
+          )}
+
+          {/* RESULT BUTTONS */}
+
+          <div
+            style={{
+              display:
+                "flex",
+              flexWrap:
+                "wrap",
+              gap: 12,
+              marginTop: 25,
+            }}
+          >
+
+            <button
+              type="button"
+              className="ai-button"
+              onClick={
+                restartTest
+              }
+            >
+              🔄 Re-attempt Test
+            </button>
+
+            <button
+              type="button"
+              className="ai-button"
+              onClick={onBack}
+            >
+              ← Test List
+            </button>
+
+          </div>
+
+        </div>
+      </main>
+    );
+  }
+
+  // ====================================================
+  // CURRENT QUESTION
+  // ====================================================
+
+  const question =
+    questions[current];
+
+  const options =
+    getOptions(question);
+
+  const selected =
+    normalizeAnswer(
+      answers[current]
+    );
+
+  const correct =
+    normalizeAnswer(
+      getAnswer(question)
+    );
+
+  const selectedOption =
+    options.find(
+      (option) =>
+        normalizeAnswer(
+          option.key
+        ) === selected
+    );
+
+  const correctOption =
+    options.find(
+      (option) =>
+        normalizeAnswer(
+          option.key
+        ) === correct
+    );
+
+  const hasSelected =
+    answers[current] !==
+      undefined &&
+    answers[current] !==
+      null &&
+    answers[current] !== "";
+
+  const currentIsCorrect =
+    hasSelected &&
+    isCorrect(
+      question,
+      answers[current]
+    );
+
+  // ====================================================
+  // RENDER TEST
+  // ====================================================
+
+  return (
+    <main className="ai-container">
+
+      <div className="ai-card">
+
+        {/* HEADER */}
+
+        <div
+          style={{
+            display:
+              "flex",
+            justifyContent:
+              "space-between",
+            alignItems:
+              "center",
+            gap: 10,
+            flexWrap:
+              "wrap",
+          }}
+        >
+
+          <div>
+            <h2
+              style={{
+                margin:
+                  "0 0 5px",
+              }}
+            >
+              {test?.examTitle ||
+                test?.examName ||
+                "Exam Test"}
+            </h2>
+
+            <div
+              style={{
+                color:
+                  "#64748b",
+              }}
+            >
+              {test?.title ||
+                "Test"}{" "}
+              • प्रश्न{" "}
+              {current + 1}
+              /
+              {questions.length}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding:
+                "10px 16px",
+              borderRadius: 12,
+              background:
+                timeLeft <= 60
+                  ? "#fee2e2"
+                  : "#eff6ff",
+              color:
+                timeLeft <= 60
+                  ? "#b91c1c"
+                  : "#1d4ed8",
+              fontWeight: 900,
+              fontSize: 18,
+            }}
+          >
+            ⏱️{" "}
+            {formatTime(
+              timeLeft
+            )}
+          </div>
+
+        </div>
+
+        {/* PROGRESS */}
+
+        <div
+          style={{
+            marginTop: 18,
+            height: 8,
+            background:
+              "#e5e7eb",
+            borderRadius: 999,
+            overflow:
+              "hidden",
+          }}
+        >
+          <div
+            style={{
+              width:
+                `${
+                  ((current + 1) /
+                    questions.length) *
+                  100
+                }%`,
+              height: "100%",
+              background:
+                "#2563eb",
+              transition:
+                "width .2s ease",
+            }}
+          />
+        </div>
+
+        {/* QUESTION */}
+
+        <div
+          style={{
+            marginTop: 22,
+          }}
+        >
+
+          <h2
+            style={{
+              lineHeight: 1.6,
+              marginBottom: 20,
+            }}
+          >
+            Q.{current + 1}{" "}
+            {question?.question}
+          </h2>
+
+          {/* OPTIONS */}
+
+          <div
+            style={{
+              display:
+                "grid",
+              gap: 12,
+            }}
+          >
+
+            {options.map(
+              (option) => {
+
+                const optionKey =
+                  normalizeAnswer(
+                    option.key
+                  );
+
+                const isSelected =
+                  selected ===
+                  optionKey;
+
+                /*
+                  Re-attempt में
+                  Answer तुरंत दिखेगा।
+                */
+
+                const showResult =
+                  isReattempt &&
+                  hasSelected;
+
+                const isCorrectOption =
+                  correct ===
+                  optionKey;
+
+                let background =
+                  "#ffffff";
+
+                let border =
+                  "1px solid #dbe3ee";
+
+                let textColor =
+                  "#111827";
+
+                if (
+                  showResult &&
+                  isCorrectOption
+                ) {
+                  background =
+                    "#dcfce7";
+
+                  border =
+                    "2px solid #16a34a";
+
+                  textColor =
+                    "#166534";
+                }
+
+                if (
+                  showResult &&
+                  isSelected &&
+                  !isCorrectOption
+                ) {
+                  background =
+                    "#fee2e2";
+
+                  border =
+                    "2px solid #dc2626";
+
+                  textColor =
+                    "#991b1b";
+                }
+
+                if (
+                  !showResult &&
+                  isSelected
+                ) {
+                  background =
+                    "#eff6ff";
+
+                  border =
+                    "2px solid #2563eb";
+
+                  textColor =
+                    "#1d4ed8";
+                }
+
+                return (
+                  <button
+                    key={
+                      option.key
+                    }
+                    type="button"
+                    onClick={() =>
+                      choose(
+                        option.key
+                      )
+                    }
+                    style={{
+                      width:
+                        "100%",
+                      textAlign:
+                        "left",
+                      padding:
+                        "15px 16px",
+                      borderRadius:
+                        12,
+                      border,
+                      background,
+                      color:
+                        textColor,
+                      cursor:
+                        "pointer",
+                      fontSize:
+                        16,
+                      lineHeight:
+                        1.5,
+                      fontWeight:
+                        isSelected ||
+                        (
+                          showResult &&
+                          isCorrectOption
+                        )
+                          ? 700
+                          : 500,
+                    }}
+                  >
+
+                    <strong>
+                      {option.key}.
+                    </strong>{" "}
+
+                    {option.value}
+
+                    {showResult &&
+                      isCorrectOption && (
+                        <span
+                          style={{
+                            float:
+                              "right",
+                            fontWeight:
+                              900,
+                          }}
+                        >
+                          ✅ सही
+                        </span>
+                      )}
+
+                    {showResult &&
+                      isSelected &&
+                      !isCorrectOption && (
+                        <span
+                          style={{
+                            float:
+                              "right",
+                            fontWeight:
+                              900,
+                          }}
+                        >
+                          ❌ आपका उत्तर
+                        </span>
+                      )}
+
+                  </button>
+                );
+              }
+            )}
+
+          </div>
+
+          {/* RE-ATTEMPT INSTANT RESULT */}
+
+          {isReattempt &&
+            hasSelected && (
+              <div
+                style={{
+                  marginTop: 18,
+                  padding: 18,
+                  borderRadius: 14,
+                  background:
+                    currentIsCorrect
+                      ? "#ecfdf5"
+                      : "#fef2f2",
+                  border:
+                    currentIsCorrect
+                      ? "1px solid #86efac"
+                      : "1px solid #fecaca",
+                }}
+              >
+
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 900,
+                    marginBottom: 10,
+                  }}
+                >
+                  {currentIsCorrect
+                    ? "✅ आपका उत्तर सही है"
+                    : "❌ आपका उत्तर गलत है"}
+                </div>
+
+                <div
+                  style={{
+                    lineHeight: 1.7,
+                  }}
+                >
+                  <strong>
+                    आपका उत्तर:
+                  </strong>{" "}
+
+                  {selectedOption
+                    ? `${selectedOption.key}) ${selectedOption.value}`
+                    : "नहीं दिया"}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    lineHeight: 1.7,
+                  }}
+                >
+                  <strong>
+                    सही उत्तर:
+                  </strong>{" "}
+
+                  {correctOption
+                    ? `${correctOption.key}) ${correctOption.value}`
+                    : getAnswer(
+                        question
+                      )}
+                </div>
+
+                {/* INSTANT EXPLANATION */}
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: 14,
+                    borderRadius: 10,
+                    background:
+                      "#ffffff",
+                    lineHeight: 1.7,
+                  }}
+                >
+                  <strong>
+                    📖 व्याख्या:
+                  </strong>
+
+                  <div
+                    style={{
+                      marginTop: 6,
+                      whiteSpace:
+                        "pre-wrap",
+                    }}
+                  >
+                    {getExplanation(
+                      question
+                    )}
+                  </div>
+                </div>
+
+                {/* IMPORTANT FACTS */}
+
+                {getImportantFacts(
+                  question
+                ).length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 14,
+                      borderRadius: 10,
+                      background:
+                        "#eff6ff",
+                    }}
+                  >
+                    <strong>
+                      📌 महत्वपूर्ण तथ्य:
+                    </strong>
+
+                    <ul
+                      style={{
+                        marginTop: 8,
+                      }}
+                    >
+                      {getImportantFacts(
+                        question
+                      ).map(
+                        (
+                          fact,
+                          index
+                        ) => (
+                          <li
+                            key={
+                              index
+                            }
+                          >
+                            {typeof fact ===
+                            "object"
+                              ? fact?.text ??
+                                fact?.value ??
+                                JSON.stringify(
+                                  fact
+                                )
+                              : fact}
+                          </li>
+                        )
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                {/* EXAM TRICK */}
+
+                {getExamTrick(
+                  question
+                ) && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 14,
+                      borderRadius: 10,
+                      background:
+                        "#fff7ed",
+                    }}
+                  >
+                    <strong>
+                      💡 Exam Trick:
+                    </strong>
+
+                    <div
+                      style={{
+                        marginTop: 6,
+                        whiteSpace:
+                          "pre-wrap",
+                      }}
+                    >
+                      {getExamTrick(
+                        question
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            )}
+
+        </div>
+
+        {/* NAVIGATION */}
+
+        <div
+          style={{
+            display:
+              "flex",
+            justifyContent:
+              "space-between",
+            gap: 10,
+            flexWrap:
+              "wrap",
+            marginTop: 25,
+          }}
+        >
+
+          <button
+            type="button"
+            className="ai-button"
+            disabled={
+              current === 0
+            }
+            onClick={() => {
+              setCurrent(
+                (value) =>
+                  Math.max(
+                    0,
+                    value - 1
+                  )
+              );
+
+              window.scrollTo({
+                top: 0,
+                behavior:
+                  "smooth",
+              });
+            }}
+          >
+            ← Previous
+          </button>
+
+          {current <
+          questions.length - 1 ? (
+            <button
+              type="button"
+              className="ai-button"
+              onClick={() => {
+                setCurrent(
+                  (value) =>
+                    Math.min(
+                      questions.length -
+                        1,
+                      value + 1
+                    )
+                );
+
+                window.scrollTo({
+                  top: 0,
+                  behavior:
+                    "smooth",
+                });
+              }}
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ai-button"
+              onClick={
+                submitTest
+              }
+            >
+              ✅ Test Submit करें
+            </button>
+          )}
+
+        </div>
+
+        {/* QUESTION PALETTE */}
+
+        <div
+          style={{
+            marginTop: 28,
+          }}
+        >
+
+          <h3>
+            प्रश्न सूची
+          </h3>
+
+          <div
+            style={{
+              display:
+                "flex",
+              flexWrap:
+                "wrap",
+              gap: 8,
+            }}
+          >
+
+            {questions.map(
+              (_, index) => {
+
+                const answered =
+                  answers[index] !==
+                    undefined &&
+                  answers[index] !==
+                    null &&
+                  answers[index] !==
+                    "";
+
+                return (
+                  <button
+                    key={
+                      index
+                    }
+                    type="button"
+                    onClick={() => {
+                      setCurrent(
+                        index
+                      );
+
+                      window.scrollTo({
+                        top: 0,
+                        behavior:
+                          "smooth",
+                      });
+                    }}
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius:
+                        10,
+                      border:
+                        current ===
+                        index
+                          ? "2px solid #2563eb"
+                          : "1px solid #d1d5db",
+                      background:
+                        answered
+                          ? "#dcfce7"
+                          : "#ffffff",
+                      fontWeight:
+                        800,
+                      cursor:
+                        "pointer",
+                    }}
+                  >
+                    {index + 1}
+                  </button>
+                );
+              }
+            )}
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+  );
+}
