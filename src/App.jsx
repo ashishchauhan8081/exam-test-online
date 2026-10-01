@@ -1772,6 +1772,7 @@ function HomePage({
   userData,
   onLogout,
   onNavigate,
+  onSelectExam,
 }) {
   return (
     <div className="app-container">
@@ -1898,11 +1899,7 @@ function HomePage({
                   type="button"
                   className="exam-card"
                   onClick={() =>
-                    onNavigate(
-                      "tests",
-                      exam.id,
-                      exam.name
-                    )
+                    onSelectExam(exam)
                   }
                   style={{
                     background:
@@ -2216,7 +2213,14 @@ export default function App() {
   const [
     selectedExam,
     setSelectedExam,
-  ] = useState(null);
+  ] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("exam_test_selected_exam");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Login से पहले जिस Test को खोला गया था
   const [
@@ -2520,33 +2524,44 @@ export default function App() {
      NAVIGATION PROTECTION
   ==================================================== */
 
-  const protectedNavigate =
-    (targetScreen, examId = null, examName = null) => {
+  const handleSelectExam = (exam) => {
+    if (!exam?.id) return;
 
-      if (targetScreen === "tests") {
-        // Test Series public रहेगी; केवल चुने हुए Exam के tests दिखेंगे।
-        if (examId) {
-          setSelectedExam({
-            id: examId,
-            name: examName || examId,
-          });
-        } else if (!selectedExam && userData?.preparation) {
-          const prep = String(userData.preparation).trim();
-          setSelectedExam({ id: prep.toLowerCase().replace(/\s+/g, ""), name: prep });
-        }
-
-        setScreen("tests");
-        return;
-      }
-
-      // बाकी pages अभी भी Login के बाद ही खुलेंगे।
-      if (!firebaseUser) {
-        setAuthPage("login");
-        return;
-      }
-
-      setScreen(targetScreen);
+    const selected = {
+      id: String(exam.id),
+      name: exam.name || String(exam.id),
     };
+
+    setSelectedExam(selected);
+
+    try {
+      sessionStorage.setItem(
+        "exam_test_selected_exam",
+        JSON.stringify(selected)
+      );
+    } catch {}
+
+    setScreen("tests");
+    setAuthPage(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const protectedNavigate = (targetScreen) => {
+    // Test Series को बिना Login के देख सकते हैं।
+    if (targetScreen === "tests") {
+      setScreen("tests");
+      return;
+    }
+
+    // बाकी protected pages Login के बाद खुलेंगे।
+    if (!firebaseUser) {
+      setAuthPage("login");
+      return;
+    }
+
+    setScreen(targetScreen);
+  };
+
   /* ====================================================
      ADMIN CHECK
   ==================================================== */
@@ -2847,6 +2862,9 @@ export default function App() {
             onBack={() => {
               setScreen("home");
               setSelectedExam(null);
+              try {
+                sessionStorage.removeItem("exam_test_selected_exam");
+              } catch {}
             }}
             onStartTest={(test) => {
               // Test खोलने के समय Login जरूरी है।
@@ -2933,6 +2951,10 @@ export default function App() {
 
           onNavigate={
             protectedNavigate
+          }
+
+          onSelectExam={
+            handleSelectExam
           }
         />
       );
