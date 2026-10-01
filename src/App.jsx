@@ -1899,7 +1899,9 @@ function HomePage({
                   className="exam-card"
                   onClick={() =>
                     onNavigate(
-                      "tests"
+                      "tests",
+                      exam.id,
+                      exam.name
                     )
                   }
                   style={{
@@ -2210,6 +2212,18 @@ export default function App() {
     setSelectedTest,
   ] = useState(null);
 
+  // Home से चुना गया Exam (जैसे uppet / uppcs)
+  const [
+    selectedExam,
+    setSelectedExam,
+  ] = useState(null);
+
+  // Login से पहले जिस Test को खोला गया था
+  const [
+    pendingTest,
+    setPendingTest,
+  ] = useState(null);
+
   const [
     authPage,
     setAuthPage,
@@ -2288,22 +2302,10 @@ export default function App() {
               null
             );
 
-            /*
-              बिना Login कोई protected
-              page नहीं खुलेगा।
-            */
-
-            setScreen(
-              "home"
-            );
-
-            /*
-              Login automatically open
-            */
-
-            setAuthPage(
-              "login"
-            );
+            // Website का Home Page बिना Login के खुलेगा।
+            // Login केवल Test Start करने पर मांगा जाएगा।
+            setScreen("home");
+            setAuthPage(null);
           }
 
           setLoading(
@@ -2374,13 +2376,17 @@ export default function App() {
         user
       );
 
-      setAuthPage(
-        null
-      );
+      setAuthPage(null);
 
-      setScreen(
-        "home"
-      );
+      // अगर Login Test Start के लिए कराया गया था,
+      // तो Login के बाद वही Test खोलें।
+      if (pendingTest) {
+        const testToOpen = pendingTest;
+        setPendingTest(null);
+        handleStartTest(testToOpen);
+      } else {
+        setScreen("home");
+      }
     };
 
   /* ====================================================
@@ -2452,14 +2458,8 @@ export default function App() {
           "home"
         );
 
-        /*
-          Logout के बाद Login
-          फिर से खुलेगा।
-        */
-
-        setAuthPage(
-          "login"
-        );
+        // Logout के बाद Home Page खुला रहेगा; Login स्वतः नहीं खुलेगा।
+        setAuthPage(null);
 
       } catch (error) {
 
@@ -2521,48 +2521,32 @@ export default function App() {
   ==================================================== */
 
   const protectedNavigate =
-    (targetScreen) => {
+    (targetScreen, examId = null, examName = null) => {
 
-      /*
-        User Login नहीं है
-      */
+      if (targetScreen === "tests") {
+        // Test Series public रहेगी; केवल चुने हुए Exam के tests दिखेंगे।
+        if (examId) {
+          setSelectedExam({
+            id: examId,
+            name: examName || examId,
+          });
+        } else if (!selectedExam && userData?.preparation) {
+          const prep = String(userData.preparation).trim();
+          setSelectedExam({ id: prep.toLowerCase().replace(/\s+/g, ""), name: prep });
+        }
 
+        setScreen("tests");
+        return;
+      }
+
+      // बाकी pages अभी भी Login के बाद ही खुलेंगे।
       if (!firebaseUser) {
-
-        setAuthPage(
-          "login"
-        );
-
+        setAuthPage("login");
         return;
       }
 
-      /*
-        Admin को user pages से अलग
-        रखा जा सकता है।
-      */
-
-      if (
-        firebaseUser.email?.toLowerCase() ===
-        ADMIN_EMAIL.toLowerCase()
-      ) {
-
-        /*
-          Admin के लिए normal
-          website भी खुल सकती है।
-        */
-
-        setScreen(
-          targetScreen
-        );
-
-        return;
-      }
-
-      setScreen(
-        targetScreen
-      );
+      setScreen(targetScreen);
     };
-
   /* ====================================================
      ADMIN CHECK
   ==================================================== */
@@ -2859,14 +2843,20 @@ export default function App() {
 
         return (
           <TestSeries
-            onBack={() =>
-              setScreen(
-                "home"
-              )
-            }
-            onStartTest={
-              handleStartTest
-            }
+            selectedExam={selectedExam}
+            onBack={() => {
+              setScreen("home");
+              setSelectedExam(null);
+            }}
+            onStartTest={(test) => {
+              // Test खोलने के समय Login जरूरी है।
+              if (!firebaseUser) {
+                setPendingTest(test);
+                setAuthPage("login");
+                return;
+              }
+              handleStartTest(test);
+            }}
           />
         );
       }
@@ -2953,6 +2943,8 @@ export default function App() {
       userData,
       isAdmin,
       selectedTest,
+      selectedExam,
+      pendingTest,
     ]);
 
   /* ====================================================
