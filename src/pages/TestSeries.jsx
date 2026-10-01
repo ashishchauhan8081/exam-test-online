@@ -159,6 +159,22 @@ export default function TestSeries({ onBack, onStartTest, selectedExam }) {
     <div className="page-container" style={{ padding: "25px 18px 40px" }}>
       <button type="button" className="back-btn" onClick={onBack} style={{ marginBottom: 20 }}>← Home</button>
 
+      {/* चुना गया Exam स्पष्ट रूप से ऊपर दिखाएँ */}
+      <div
+        style={{
+          marginBottom: 18,
+          padding: "14px 18px",
+          background: "#dbeafe",
+          border: "1px solid #93c5fd",
+          borderRadius: 12,
+          color: "#1e3a8a",
+          fontWeight: 800,
+          fontSize: 18,
+        }}
+      >
+        🎯 Selected Exam: {selectedExam.name}
+      </div>
+
       <div style={{ marginBottom: 25 }}>
         <h1 style={{ marginBottom: 8 }}>🎯 {selectedExam.name} Test Series</h1>
         <p style={{ color: "#64748b", margin: 0 }}>सिर्फ <strong>{selectedExam.name}</strong> के Tests दिखाई जा रहे हैं।</p>
