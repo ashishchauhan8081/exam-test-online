@@ -38,8 +38,7 @@ export default async function handler(req, res) {
     // API KEY
     // ============================================
 
-    const apiKey =
-      process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
@@ -62,21 +61,19 @@ export default async function handler(req, res) {
       currentAffairs = false,
     } = req.body || {};
 
-    if (
-      !topic ||
-      !String(topic).trim()
-    ) {
+    if (!topic || !String(topic).trim()) {
       return res.status(400).json({
         success: false,
         error: "कृपया Topic डालें।",
       });
     }
 
+    // ============================================
+    // QUESTION COUNT
+    // ============================================
+
     const questionCount = Math.min(
-      Math.max(
-        Number(count) || 10,
-        1
-      ),
+      Math.max(Number(count) || 10, 1),
       50
     );
 
@@ -86,16 +83,15 @@ export default async function handler(req, res) {
 
     const now = new Date();
 
-    const currentDate =
-      now.toLocaleDateString(
-        "en-IN",
-        {
-          timeZone: "Asia/Kolkata",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }
-      );
+    const currentDate = now.toLocaleDateString(
+      "en-IN",
+      {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }
+    );
 
     // ============================================
     // PROMPT
@@ -243,26 +239,48 @@ Exact JSON format:
     // ============================================
     // GEMINI MODELS
     // ============================================
+    //
+    // आपकी वर्तमान AI Studio limits को ध्यान में रखते हुए
+    // Flash-Lite models को पहले रखा गया है।
+    //
+    // 1. Gemini 3.5 Flash Lite
+    // 2. Gemini 3.1 Flash Lite
+    //
+    // ============================================
 
     const models = [
-      "gemini-3.8-flash",
-      "gemini-3.6-flash",
       "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
     ];
 
     let geminiResponse = null;
     let geminiData = null;
     let lastError = null;
+    let lastModel = null;
+
+    // ============================================
+    // SMALL DELAY FUNCTION
+    // ============================================
+
+    const sleep = (ms) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
 
     // ============================================
     // TRY MODELS
     // ============================================
 
-    for (const model of models) {
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+      lastModel = model;
+
       const url =
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
       try {
+        // ========================================
+        // REQUEST BODY
+        // ========================================
+
         const requestBody = {
           contents: [
             {
@@ -275,13 +293,13 @@ Exact JSON format:
           ],
 
           generationConfig: {
-            responseMimeType:
-              "application/json",
+            responseMimeType: "application/json",
+            temperature: 0.2,
           },
         };
 
         // ========================================
-        // REAL-TIME SEARCH
+        // CURRENT AFFAIRS SEARCH
         // ========================================
 
         if (currentAffairs) {
@@ -292,29 +310,42 @@ Exact JSON format:
           ];
         }
 
-        geminiResponse =
-          await fetch(url, {
-            method: "POST",
+        // ========================================
+        // API REQUEST
+        // ========================================
 
-            headers: {
-              "Content-Type":
-                "application/json",
+        geminiResponse = await fetch(url, {
+          method: "POST",
 
-              "x-goog-api-key":
-                apiKey,
-            },
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
 
-            body: JSON.stringify(
-              requestBody
-            ),
-          });
+          body: JSON.stringify(requestBody),
+        });
 
-        geminiData =
-          await geminiResponse.json();
+        // ========================================
+        // READ RESPONSE
+        // ========================================
+
+        geminiData = await geminiResponse.json();
+
+        // ========================================
+        // SUCCESS
+        // ========================================
 
         if (geminiResponse.ok) {
+          console.log(
+            `Gemini success with model: ${model}`
+          );
+
           break;
         }
+
+        // ========================================
+        // ERROR
+        // ========================================
 
         lastError =
           geminiData?.error?.message ||
@@ -325,12 +356,29 @@ Exact JSON format:
           geminiData
         );
 
+        // ========================================
+        // RATE LIMIT / SERVER ERROR
+        // ========================================
+
         if (
           geminiResponse.status === 429 ||
           geminiResponse.status === 503
         ) {
+          console.warn(
+            `Model ${model} unavailable. Trying next model...`
+          );
+
+          // छोटा delay ताकि लगातार requests न जाएँ
+          if (i < models.length - 1) {
+            await sleep(1000);
+          }
+
           continue;
         }
+
+        // ========================================
+        // OTHER ERROR
+        // ========================================
 
         break;
       } catch (error) {
@@ -342,6 +390,10 @@ Exact JSON format:
           `Network error with ${model}:`,
           error
         );
+
+        if (i < models.length - 1) {
+          await sleep(1000);
+        }
 
         continue;
       }
@@ -355,13 +407,29 @@ Exact JSON format:
       !geminiResponse ||
       !geminiResponse.ok
     ) {
+      let friendlyError =
+        lastError ||
+        "Gemini अभी उपलब्ध नहीं है। कृपया बाद में फिर प्रयास करें।";
+
+      const errorLower =
+        String(friendlyError).toLowerCase();
+
+      if (
+        errorLower.includes("quota") ||
+        errorLower.includes("rate limit") ||
+        errorLower.includes("too many requests") ||
+        errorLower.includes("429")
+      ) {
+        friendlyError =
+          "Gemini API quota/rate limit समाप्त या उपलब्ध नहीं है। कृपया थोड़ी देर बाद फिर प्रयास करें।";
+      }
+
       return res.status(
         geminiResponse?.status || 500
       ).json({
         success: false,
-        error:
-          lastError ||
-          "Gemini अभी उपलब्ध नहीं है। कृपया बाद में फिर प्रयास करें।",
+        error: friendlyError,
+        model: lastModel,
       });
     }
 
@@ -392,8 +460,7 @@ Exact JSON format:
     // CLEAN JSON
     // ============================================
 
-    let cleanText =
-      String(text).trim();
+    let cleanText = String(text).trim();
 
     cleanText = cleanText
       .replace(/^```json/i, "")
@@ -408,8 +475,7 @@ Exact JSON format:
     let parsed;
 
     try {
-      parsed =
-        JSON.parse(cleanText);
+      parsed = JSON.parse(cleanText);
     } catch (parseError) {
       console.error(
         "JSON Parse Error:",
@@ -434,9 +500,7 @@ Exact JSON format:
 
     if (
       !parsed ||
-      !Array.isArray(
-        parsed.questions
-      )
+      !Array.isArray(parsed.questions)
     ) {
       return res.status(500).json({
         success: false,
@@ -449,67 +513,60 @@ Exact JSON format:
     // NORMALIZE QUESTIONS
     // ============================================
 
-    const questions =
-      parsed.questions
-        .slice(0, questionCount)
-        .map((item) => {
-          const answer =
-            String(
-              item?.answer || ""
-            )
-              .trim()
-              .toUpperCase();
+    const questions = parsed.questions
+      .slice(0, questionCount)
+      .map((item) => {
+        const answer = String(
+          item?.answer || ""
+        )
+          .trim()
+          .toUpperCase();
 
-          return {
-            question:
-              String(
-                item?.question || ""
-              ).trim(),
+        return {
+          question: String(
+            item?.question || ""
+          ).trim(),
 
-            options: {
-              A: String(
-                item?.options?.A ||
-                  ""
-              ).trim(),
+          options: {
+            A: String(
+              item?.options?.A || ""
+            ).trim(),
 
-              B: String(
-                item?.options?.B ||
-                  ""
-              ).trim(),
+            B: String(
+              item?.options?.B || ""
+            ).trim(),
 
-              C: String(
-                item?.options?.C ||
-                  ""
-              ).trim(),
+            C: String(
+              item?.options?.C || ""
+            ).trim(),
 
-              D: String(
-                item?.options?.D ||
-                  ""
-              ).trim(),
-            },
+            D: String(
+              item?.options?.D || ""
+            ).trim(),
+          },
 
-            answer:
-              ["A", "B", "C", "D"].includes(
-                answer
-              )
-                ? answer
-                : "A",
+          answer: [
+            "A",
+            "B",
+            "C",
+            "D",
+          ].includes(answer)
+            ? answer
+            : "A",
 
-            explanation:
-              String(
-                item?.explanation ||
-                  ""
-              ).trim(),
-          };
-        })
-        .filter(
-          (item) =>
-            item.question &&
-            item.options.A &&
-            item.options.B &&
-            item.options.C &&
-            item.options.D
-        );
+          explanation: String(
+            item?.explanation || ""
+          ).trim(),
+        };
+      })
+      .filter(
+        (item) =>
+          item.question &&
+          item.options.A &&
+          item.options.B &&
+          item.options.C &&
+          item.options.D
+      );
 
     // ============================================
     // VALIDATION
@@ -536,9 +593,7 @@ Exact JSON format:
         ?.groundingChunks;
 
     if (
-      Array.isArray(
-        groundingChunks
-      )
+      Array.isArray(groundingChunks)
     ) {
       groundingChunks.forEach(
         (chunk) => {
@@ -579,13 +634,15 @@ Exact JSON format:
 
       date: currentDate,
 
-      count:
-        questions.length,
+      count: questions.length,
+
+      model: lastModel,
 
       questions,
 
       sources,
     });
+
   } catch (error) {
     console.error(
       "MCQ API ERROR:",
