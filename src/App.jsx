@@ -7,13 +7,6 @@ import React, {
 import "./App.css";
 
 import {
-  getApps,
-  getApp,
-  initializeApp,
-} from "firebase/app";
-
-import {
-  getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
@@ -22,37 +15,25 @@ import {
 } from "firebase/auth";
 
 import {
-  getDatabase,
   ref,
   get,
   set,
 } from "firebase/database";
 
-import firebaseConfig from "./firebase-config.json";
+import { auth, db } from "./firebase";
 
 import AdminPanel from "./components/AdminPanel";
 import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
 import TestSeries from "./pages/TestSeries";
 import TestRunner from "./components/TestRunner";
-import LiveTest from "./pages/LiveTest";
+import LiveTest from "./components/LiveTest";
 import LiveGeminiTest from "./components/LiveGeminiTest";
-
-/* ======================================================
-   FIREBASE
-====================================================== */
-
-const firebaseApp = getApps().length
-  ? getApp()
-  : initializeApp({
-      ...firebaseConfig,
-      databaseURL:
-        firebaseConfig.databaseURL ||
-        "https://study-with-power-f6914-default-rtdb.asia-southeast1.firebasedatabase.app",
-    });
-
-const auth = getAuth(firebaseApp);
-const db = getDatabase(firebaseApp);
+import AdminLiveTest from "./components/AdminLiveTest";
+import AnnouncementAdmin from "./components/AnnouncementAdmin";
+import NCERTAdmin from "./components/NCERTAdmin";
+import NCERTLibrary from "./components/NCERTLibrary";
+import Subscription from "./pages/Subscription";
 
 /* ======================================================
    APP SETTINGS
@@ -1776,6 +1757,23 @@ function HomePage({
   onNavigate,
   onSelectExam,
 }) {
+  const [announcements, setAnnouncements] = useState([]);
+  const [closedNotice, setClosedNotice] = useState(() => {
+    try { return sessionStorage.getItem("exam_test_closed_notice") || ""; } catch { return ""; }
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    get(ref(db, "announcements")).then((snap) => {
+      if (!mounted) return;
+      const value = snap.exists() ? snap.val() : {};
+      setAnnouncements(Object.entries(value).map(([id, v]) => ({ id, ...v })).filter(x => x.active !== false).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)));
+    }).catch(console.error);
+    return () => { mounted = false; };
+  }, []);
+
+  const visibleNotice = announcements.find(x => x.id !== closedNotice);
+
   return (
     <div className="app-container">
 
@@ -1837,6 +1835,19 @@ function HomePage({
       ================================================= */}
 
       <main className="home-content">
+
+        {visibleNotice && (
+          <div style={{marginBottom:18,background:"#fff7ed",border:"1px solid #fdba74",borderRadius:14,padding:"10px 14px",display:"flex",alignItems:"center",gap:12,overflow:"hidden"}}>
+            <span style={{fontSize:20}}>📢</span>
+            <div style={{flex:1,overflow:"hidden",whiteSpace:"nowrap"}}>
+              <span style={{display:"inline-block",fontWeight:800,animation:"examNoticeMove 14s linear infinite"}}>
+                {visibleNotice.title}: {visibleNotice.message}
+              </span>
+            </div>
+            {visibleNotice.link && <button type="button" onClick={()=>window.open(visibleNotice.link,"_blank","noopener,noreferrer")} style={{border:0,borderRadius:8,padding:"7px 10px",fontWeight:800}}>Open</button>}
+            <button type="button" aria-label="Close notification" onClick={()=>{setClosedNotice(visibleNotice.id);try{sessionStorage.setItem("exam_test_closed_notice",visibleNotice.id)}catch{}}} style={{border:0,background:"transparent",fontSize:20,cursor:"pointer"}}>✕</button>
+          </div>
+        )}
 
         <section className="hero-section">
 
@@ -1927,6 +1938,11 @@ function HomePage({
 
         </section>
 
+        <section style={{margin:"18px 0",padding:16,background:"#ecfdf5",border:"1px solid #86efac",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div><strong style={{fontSize:18}}>💬 Help & Support</strong><div style={{color:"#166534",marginTop:4}}>किसी भी समस्या के लिए WhatsApp पर हमसे संपर्क करें।</div></div>
+          <button type="button" onClick={()=>{const n=import.meta.env.VITE_WHATSAPP_SUPPORT_NUMBER||"91XXXXXXXXXX"; window.open(`https://wa.me/${String(n).replace(/\D/g,"")}?text=${encodeURIComponent("Hello Exam Test Support")}`,"_blank","noopener,noreferrer")}} style={{background:"#16a34a",color:"#fff",border:0,borderRadius:10,padding:"11px 16px",fontWeight:800,cursor:"pointer"}}>🟢 WhatsApp Support</button>
+        </section>
+
         {/* =================================================
             FEATURES
         ================================================= */}
@@ -1979,6 +1995,27 @@ function HomePage({
             type="button"
             onClick={() =>
               onNavigate(
+                "live-tests"
+              )
+            }
+          >
+            <span>
+              🔴
+            </span>
+
+            <strong>
+              Live Test
+            </strong>
+
+            <small>
+              अभी और Upcoming Tests
+            </small>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate(
                 "current"
               )
             }
@@ -2017,13 +2054,10 @@ function HomePage({
             </small>
           </button>
 
-          <button
-            type="button"
-            onClick={() => onNavigate("live-tests")}
-          >
-            <span>🔴</span>
-            <strong>Live Test</strong>
-            <small>अभी चल रहे टेस्ट</small>
+          <button type="button" onClick={() => onNavigate("ncert")}>
+            <span>📚</span>
+            <strong>NCERT Books</strong>
+            <small>Class • Subject • Lesson</small>
           </button>
 
         </section>
@@ -2220,7 +2254,7 @@ export default function App() {
     setSelectedTest,
   ] = useState(null);
 
-  // Live Test के लिए अलग runner state
+  // Live Gemini Test के लिए चुना गया Live Test
   const [
     selectedLiveTest,
     setSelectedLiveTest,
@@ -2399,15 +2433,14 @@ export default function App() {
 
       setAuthPage(null);
 
-      // अगर Login Test Start के लिए कराया गया था,
-      // तो Login के बाद वही Test खोलें।
+      // Login के बाद pending Live Test या normal Test खोलें।
       if (pendingTest) {
         const testToOpen = pendingTest;
         setPendingTest(null);
 
         if (testToOpen?.__live) {
           setSelectedLiveTest(testToOpen);
-          setScreen("live-test");
+          setScreen("live-gemini");
           window.scrollTo({ top: 0, behavior: "smooth" });
         } else {
           handleStartTest(testToOpen);
@@ -2525,7 +2558,6 @@ export default function App() {
         test?.duration ??
         30,
       questions:
-        test?.questions ??
         raw?.questions ??
         [],
     };
@@ -2543,11 +2575,6 @@ export default function App() {
   const handleBackFromTest = () => {
     setSelectedTest(null);
     setScreen("tests");
-  };
-
-  const handleBackFromLiveTest = () => {
-    setSelectedLiveTest(null);
-    setScreen("live-tests");
   };
 
   /* ====================================================
@@ -2577,11 +2604,8 @@ export default function App() {
   };
 
   const protectedNavigate = (targetScreen) => {
-    // Test Series को बिना Login के देख सकते हैं।
-    if (
-      targetScreen === "tests" ||
-      targetScreen === "live-tests"
-    ) {
+    // Test Series और Live Test list बिना Login के देख सकते हैं।
+    if (targetScreen === "tests" || targetScreen === "live-tests") {
       setScreen(targetScreen);
       return;
     }
@@ -2671,6 +2695,10 @@ export default function App() {
                   🔑 Password Reset
                 </button>
 
+                <button type="button" onClick={() => setScreen("announcement-admin")}>📢 Notifications</button>
+                <button type="button" onClick={() => setScreen("ncert-admin")}>📚 NCERT PDFs</button>
+                <button type="button" onClick={() => setScreen("live-test-admin")}>🔴 Live Tests</button>
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2697,6 +2725,57 @@ export default function App() {
 
             <AdminPanel />
 
+          </div>
+        );
+      }
+
+      /* ================================================
+         ANNOUNCEMENT ADMIN
+      ================================================ */
+
+      if (screen === "announcement-admin") {
+        if (!isAdmin) return <AdminLogin onSuccess={(user)=>{setFirebaseUser(user);setScreen("announcement-admin");setAuthPage(null);}} onBack={()=>setScreen("home")} />;
+        return <AnnouncementAdmin onBack={()=>setScreen("admin")} />;
+      }
+
+      /* ================================================
+         NCERT ADMIN
+      ================================================ */
+
+      if (screen === "ncert-admin") {
+        if (!isAdmin) return <AdminLogin onSuccess={(user)=>{setFirebaseUser(user);setScreen("ncert-admin");setAuthPage(null);}} onBack={()=>setScreen("home")} />;
+        return <NCERTAdmin onBack={()=>setScreen("admin")} />;
+      }
+
+      /* ================================================
+         LIVE TEST ADMIN
+      ================================================ */
+
+      if (screen === "live-test-admin") {
+        if (!isAdmin) {
+          return (
+            <AdminLogin
+              onSuccess={(user) => {
+                setFirebaseUser(user);
+                setAuthPage(null);
+                setScreen("live-test-admin");
+              }}
+              onBack={() => setScreen("home")}
+            />
+          );
+        }
+
+        return (
+          <div>
+            <div className="admin-topbar">
+              <strong>🔴 {APP_NAME} Live Test Admin</strong>
+              <div>
+                <button type="button" onClick={() => setScreen("admin")}>← Admin Panel</button>
+                <button type="button" onClick={() => setScreen("home")}>🏠 Website</button>
+                <button type="button" onClick={logout}>Logout</button>
+              </div>
+            </div>
+            <AdminLiveTest />
           </div>
         );
       }
@@ -2793,63 +2872,6 @@ export default function App() {
       }
 
       /* ================================================
-         LIVE TEST
-      ================================================ */
-
-      if (screen === "live-test") {
-        if (!selectedLiveTest) {
-          return (
-            <div className="page-container">
-              <button type="button" className="back-btn" onClick={() => setScreen("home")}>
-                ← Home
-              </button>
-              <LiveTest
-                onJoinTest={(test) => {
-                  if (!firebaseUser) {
-                    setPendingTest({ ...test, __live: true });
-                    setAuthPage("login");
-                    return;
-                  }
-                  setSelectedLiveTest(test);
-                  setScreen("live-test");
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-              />
-            </div>
-          );
-        }
-
-        return (
-          <LiveGeminiTest
-            test={selectedLiveTest}
-            onBack={handleBackFromLiveTest}
-          />
-        );
-      }
-
-      if (screen === "live-tests") {
-        return (
-          <div className="page-container">
-            <button type="button" className="back-btn" onClick={() => setScreen("home")}>
-              ← Home
-            </button>
-            <LiveTest
-              onJoinTest={(test) => {
-                if (!firebaseUser) {
-                  setPendingTest({ ...test, __live: true });
-                  setAuthPage("login");
-                  return;
-                }
-                setSelectedLiveTest(test);
-                setScreen("live-test");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            />
-          </div>
-        );
-      }
-
-      /* ================================================
          PROTECTED PAGES
       ================================================ */
 
@@ -2939,6 +2961,65 @@ export default function App() {
       }
 
       /* ================================================
+         NCERT LIBRARY
+      ================================================ */
+      if (screen === "ncert") {
+        return <NCERTLibrary onBack={() => setScreen("home")} />;
+      }
+
+      /* ================================================
+         SUBSCRIPTION
+      ================================================ */
+      if (screen === "subscription") {
+        if (!firebaseUser) { setAuthPage("login"); return null; }
+        return <Subscription user={firebaseUser} examId={selectedExam?.id || ""} examName={selectedExam?.name || ""} onPurchase={() => setScreen("tests")} />;
+      }
+
+      /* ================================================
+         LIVE TEST LIST
+      ================================================ */
+
+      if (screen === "live-tests") {
+        return (
+          <LiveTest
+            onBack={() => setScreen("home")}
+            onJoinTest={(test) => {
+              if (!firebaseUser) {
+                setPendingTest({ ...test, __live: true });
+                setAuthPage("login");
+                return;
+              }
+
+              setSelectedLiveTest(test);
+              setScreen("live-gemini");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        );
+      }
+
+      /* ================================================
+         LIVE GEMINI RUNNER
+      ================================================ */
+
+      if (screen === "live-gemini") {
+        if (!selectedLiveTest) {
+          setScreen("live-tests");
+          return null;
+        }
+
+        return (
+          <LiveGeminiTest
+            test={selectedLiveTest}
+            onBack={() => {
+              setSelectedLiveTest(null);
+              setScreen("live-tests");
+            }}
+          />
+        );
+      }
+
+      /* ================================================
          TESTS
       ================================================ */
 
@@ -2957,7 +3038,6 @@ export default function App() {
               } catch {}
             }}
             onStartTest={(test) => {
-              // Test खोलने के समय Login जरूरी है।
               if (!firebaseUser) {
                 setPendingTest(test);
                 setAuthPage("login");
@@ -2965,6 +3045,7 @@ export default function App() {
               }
               handleStartTest(test);
             }}
+            onNeedPurchase={() => setScreen("subscription")}
           />
         );
       }
@@ -3099,7 +3180,10 @@ export default function App() {
       ================================================= */}
 
       {!firebaseUser &&
-        !authPage && (
+        !authPage &&
+        screen !== "live-tests" &&
+        screen !== "live-gemini" &&
+        screen !== "live-test-admin" && (
           <LoginRequiredPage
             onLogin={() =>
               setAuthPage(
