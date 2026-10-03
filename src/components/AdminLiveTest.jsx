@@ -1,1585 +1,417 @@
 import React, { useEffect, useState } from "react";
 import "./AdminLiveTest.css";
-
-import {
-  ref,
-  push,
-  set,
-  update,
-  remove,
-  onValue,
-  get,
-} from "firebase/database";
-
+import { ref, push, set, update, remove, onValue, get } from "firebase/database";
 import { db } from "../firebase";
 
-const AdminLiveTest = () => {
-  const [tests, setTests] = useState([]);
+const EMPTY_FORM = {
+  testName: "",
+  examName: "",
+  testId: "",
+  questionSource: "existing",
+  questionsJson: "",
+  geminiTopic: "",
+  geminiDifficulty: "Medium",
+  ncertClass: "",
+  ncertSubject: "",
+  ncertLessonNo: "",
+  totalQuestions: 25,
+  duration: 30,
+  startTime: "",
+  endTime: "",
+  examIcon: "📝",
+};
 
-  const [form, setForm] = useState({
-    testName: "",
-    examName: "",
-    testId: "",
-    questionSource: "existing",
-    questionsJson: "",
-    geminiTopic: "",
-    geminiDifficulty: "Medium",
-    ncertClass: "",
-    ncertSubject: "",
-    ncertLessonNo: "",
-    totalQuestions: 25,
-    duration: 30,
-    startTime: "",
-    endTime: "",
-    examIcon: "📝",
+const normalizeQuestions = (value) => {
+  let list = value;
+  if (!Array.isArray(list) && list && typeof list === "object") list = Object.values(list);
+  if (!Array.isArray(list)) return [];
+
+  return list.slice(0, 150).map((q, i) => {
+    const options = Array.isArray(q?.options)
+      ? q.options
+      : [q?.options?.A, q?.options?.B, q?.options?.C, q?.options?.D];
+
+    let answer = q?.answerIndex ?? q?.answer ?? 0;
+    if (typeof answer === "string") {
+      const s = answer.trim().toUpperCase();
+      answer = ["A", "B", "C", "D"].indexOf(s);
+      if (answer < 0 && !Number.isNaN(Number(s))) answer = Number(s);
+    }
+    answer = Number(answer);
+    if (!Number.isInteger(answer) || answer < 0 || answer > 3) answer = 0;
+
+    return {
+      id: q?.id || `q-${i + 1}`,
+      question: String(q?.question || q?.questionText || "").trim(),
+      options: [0, 1, 2, 3].map((n) => String(options?.[n] || "")),
+      answer,
+      explanation: Array.isArray(q?.explanation)
+        ? q.explanation.join("\n")
+        : String(q?.explanation || q?.solution || ""),
+      explanationPoints: Array.isArray(q?.explanationPoints)
+        ? q.explanationPoints
+        : undefined,
+    };
   });
+};
 
-  const [editingId, setEditingId] =
-    useState(null);
+const questionCount = (value) => normalizeQuestions(value).length;
 
-  const [saving, setSaving] =
-    useState(false);
-
-  const [checkingTest, setCheckingTest] =
-    useState(false);
-
-  // =====================================================
-  // LOAD LIVE TESTS
-  // =====================================================
+export default function AdminLiveTest() {
+  const [tests, setTests] = useState([]);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [checkingTest, setCheckingTest] = useState(false);
 
   useEffect(() => {
-    const testsRef =
-      ref(db, "liveTests");
-
-    const unsubscribe =
-      onValue(
-        testsRef,
-        (snapshot) => {
-
-          const data =
-            snapshot.val();
-
-          if (!data) {
-            setTests([]);
-            return;
-          }
-
-          const list =
-            Object.entries(data).map(
-              ([id, value]) => ({
-                id,
-                ...(value || {}),
-              })
-            );
-
-          list.sort(
-            (a, b) =>
-              new Date(
-                b.createdAt || 0
-              ).getTime() -
-              new Date(
-                a.createdAt || 0
-              ).getTime()
-          );
-
-          setTests(list);
-        }
-      );
-
-    return () =>
-      unsubscribe();
+    return onValue(ref(db, "liveTests"), (snapshot) => {
+      const data = snapshot.val() || {};
+      const list = Object.entries(data).map(([id, value]) => ({ id, ...(value || {}) }));
+      list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setTests(list);
+    });
   }, []);
 
-  // =====================================================
-  // FORM CHANGE
-  // =====================================================
-
   const handleChange = (e) => {
-
-    const {
-      name,
-      value,
-    } = e.target;
-
-    setForm(
-      (previous) => ({
-        ...previous,
-        [name]: value,
-      })
-    );
+    const { name, value } = e.target;
+    setForm((p) => ({ ...p, [name]: value }));
   };
 
-  // =====================================================
-  // RESET
-  // =====================================================
-
   const resetForm = () => {
-
-    setForm({
-      testName: "",
-      examName: "",
-      testId: "",
-      questionSource: "existing",
-      questionsJson: "",
-      geminiTopic: "",
-      geminiDifficulty: "Medium",
-      ncertClass: "",
-      ncertSubject: "",
-      ncertLessonNo: "",
-      totalQuestions: 25,
-      duration: 30,
-      startTime: "",
-      endTime: "",
-      examIcon: "📝",
-    });
-
+    setForm(EMPTY_FORM);
     setEditingId(null);
   };
 
-  // =====================================================
-  // CHECK EXISTING TEST
-  // =====================================================
-
   const checkExistingTest = async () => {
-
-    const testId =
-      String(
-        form.testId || ""
-      ).trim();
-
-    if (!testId) {
-      alert(
-        "पहले Existing Test ID डालें।"
-      );
-      return;
-    }
+    const id = String(form.testId || "").trim();
+    if (!id) return alert("पहले Existing Test ID डालें।");
 
     try {
-
       setCheckingTest(true);
-
-      const testRef =
-        ref(
-          db,
-          `tests/${testId}`
-        );
-
-      const snapshot =
-        await get(testRef);
-
-      if (!snapshot.exists()) {
-
-        alert(
-          "❌ यह Test ID Firebase में नहीं मिला।"
-        );
-
-        return;
-      }
-
-      const data =
-        snapshot.val();
-
-      let questions =
-        data?.questions;
-
-      if (
-        Array.isArray(
-          questions
-        )
-      ) {
-        questions =
-          questions;
-      } else if (
-        questions &&
-        typeof questions ===
-          "object"
-      ) {
-        questions =
-          Object.values(
-            questions
-          );
-      } else {
-        questions = [];
-      }
-
-      alert(
-        `✅ Test मिल गया!\n\n` +
-        `Test: ${
-          data.title ||
-          data.name ||
-          "Test"
-        }\n` +
-        `Questions: ${
-          questions.length
-        }`
-      );
-
+      const snap = await get(ref(db, `tests/${id}`));
+      if (!snap.exists()) return alert("❌ यह Test ID Firebase में नहीं मिला।");
+      const data = snap.val() || {};
+      alert(`✅ Test मिल गया!\n\nTest: ${data.title || data.name || "Test"}\nQuestions: ${questionCount(data.questions)}`);
     } catch (error) {
-
-      console.error(
-        "CHECK TEST ERROR:",
-        error
-      );
-
-      alert(
-        "❌ Test check नहीं हो सका:\n" +
-          error.message
-      );
-
+      alert(`❌ Test check नहीं हो सका:\n${error.message}`);
     } finally {
-
       setCheckingTest(false);
     }
   };
 
-  // =====================================================
-  // SAVE TEST
-  // =====================================================
+  const generateQuestions = async () => {
+    const count = Math.min(150, Math.max(1, Number(form.totalQuestions) || 25));
+    let topic = form.geminiTopic.trim() || form.examName.trim() || "General Competitive Exam";
+
+    if (form.questionSource === "ncert") {
+      topic = [
+        `NCERT Class ${form.ncertClass || ""}`,
+        form.ncertSubject || "",
+        form.ncertLessonNo ? `Lesson/Chapter ${form.ncertLessonNo}` : "",
+      ].filter(Boolean).join(" - ");
+    }
+
+    const response = await fetch("/api/mcq", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic,
+        exam: form.examName || "Competitive Exam",
+        count,
+        language: "Hindi",
+        difficulty: form.geminiDifficulty || "Medium",
+        explanationPoints: 5,
+        currentAffairs: false,
+        source: form.questionSource,
+        ncert: form.questionSource === "ncert"
+          ? {
+              class: form.ncertClass,
+              subject: form.ncertSubject,
+              lessonNo: form.ncertLessonNo,
+            }
+          : null,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success || !Array.isArray(data.questions)) {
+      throw new Error(data?.error || "Gemini से Questions प्राप्त नहीं हुए।");
+    }
+
+    const questions = normalizeQuestions(data.questions).slice(0, count);
+    if (!questions.length) throw new Error("कोई valid question नहीं मिला।");
+    return questions;
+  };
 
   const saveTest = async (e) => {
-
     e.preventDefault();
 
-    if (
-      !form.testName.trim()
-    ) {
-      alert(
-        "Test Name डालें।"
-      );
-      return;
+    if (!form.testName.trim()) return alert("Test Name डालें।");
+    if (!form.examName.trim()) return alert("Exam Name डालें।");
+    if (!form.startTime || !form.endTime) return alert("Start और End Time दोनों चुनें।");
+    if (new Date(form.endTime).getTime() <= new Date(form.startTime).getTime()) {
+      return alert("End Time, Start Time के बाद होना चाहिए।");
     }
 
-    if (
-      !form.examName.trim()
-    ) {
-      alert(
-        "Exam Name डालें।"
-      );
-      return;
-    }
-
-    // ===================================================
-    // QUESTION SOURCE
-    // Existing Test / Questions Zone(JSON) / Gemini / NCERT
-    // ===================================================
-
-    let importedQuestions = [];
-
-    if (form.questionSource === "json") {
-      if (!String(form.questionsJson || "").trim()) {
-        alert("Questions Zone में JSON Questions डालें।");
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(form.questionsJson);
-        importedQuestions = Array.isArray(parsed)
-          ? parsed
-          : Array.isArray(parsed?.questions)
-          ? parsed.questions
-          : [];
-
-        if (!importedQuestions.length) {
-          throw new Error("Questions array खाली है।");
-        }
-      } catch (error) {
-        alert("❌ Questions JSON गलत है:\n" + error.message);
-        return;
-      }
-    }
-
-    if (form.questionSource === "existing" && !form.testId.trim()) {
-      alert("Existing Test ID डालें।");
-      return;
-    }
-
-    if (!form.startTime) {
-      alert(
-        "Start Time चुनें।"
-      );
-      return;
-    }
-
-    if (!form.endTime) {
-      alert(
-        "End Time चुनें।"
-      );
-      return;
-    }
-
-    if (
-      new Date(
-        form.endTime
-      ).getTime() <=
-      new Date(
-        form.startTime
-      ).getTime()
-    ) {
-      alert(
-        "End Time, Start Time के बाद होना चाहिए।"
-      );
-      return;
-    }
+    const total = Math.min(150, Math.max(1, Number(form.totalQuestions) || 25));
 
     try {
-
       setSaving(true);
-
-      // =================================================
-      // Existing Test verify / Questions Zone count
-      // =================================================
-
-      let existingTest = {};
-      let questionCount = importedQuestions.length;
+      let questions = [];
+      let linkedQuestionCount = 0;
 
       if (form.questionSource === "existing") {
-        const existingTestRef = ref(
-          db,
-          `tests/${form.testId.trim()}`
-        );
+        const testId = form.testId.trim();
+        if (!testId) return alert("Existing Test ID डालें।");
+        const snap = await get(ref(db, `tests/${testId}`));
+        if (!snap.exists()) return alert("❌ Existing Test ID Firebase में नहीं मिला।");
+        const source = snap.val() || {};
+        questions = normalizeQuestions(source.questions).slice(0, total);
+        linkedQuestionCount = questionCount(source.questions);
+        if (!questions.length) return alert("❌ Existing Test में कोई Question नहीं है।");
+      }
 
-        const existingSnapshot = await get(existingTestRef);
-
-        if (!existingSnapshot.exists()) {
-          alert("❌ Existing Test ID Firebase में नहीं मिला।");
-          return;
+      if (form.questionSource === "json") {
+        if (!form.questionsJson.trim()) return alert("Questions JSON डालें।");
+        let parsed;
+        try {
+          parsed = JSON.parse(form.questionsJson);
+        } catch {
+          return alert("❌ Questions JSON गलत है।");
         }
-
-        existingTest = existingSnapshot.val() || {};
+        questions = normalizeQuestions(parsed).slice(0, total);
+        if (!questions.length) return alert("❌ JSON में valid Questions नहीं मिले।");
+        linkedQuestionCount = questions.length;
       }
 
-      if (form.questionSource === "existing") {
-        questionCount = 0;
-
-      if (
-        Array.isArray(
-          existingTest?.questions
-        )
-      ) {
-
-        questionCount =
-          existingTest.questions.length;
-
-      } else if (
-        existingTest?.questions &&
-        typeof existingTest.questions ===
-          "object"
-      ) {
-
-        questionCount =
-          Object.keys(
-            existingTest.questions
-          ).length;
-
-      } else {
-
-        questionCount =
-          Number(
-            existingTest?.questionCount ||
-            existingTest?.questionsCount ||
-            0
-          );
-      }
+      if (form.questionSource === "gemini" || form.questionSource === "ncert") {
+        setGenerating(true);
+        questions = await generateQuestions();
+        linkedQuestionCount = questions.length;
       }
 
-      if (
-        questionCount === 0 &&
-        form.questionSource !== "gemini" &&
-        form.questionSource !== "ncert"
-      ) {
-
-        alert(
-          "❌ इस Existing Test में कोई Question नहीं है।\n\nपहले Test में Questions जोड़ें।"
-        );
-
-        return;
-      }
-
-      // =================================================
-      // UPDATE
-      // =================================================
+      const payload = {
+        testName: form.testName.trim(),
+        examName: form.examName.trim(),
+        testId: form.testId.trim(),
+        questionSource: form.questionSource,
+        questions,
+        totalQuestions: Math.min(total, questions.length || total),
+        duration: Number(form.duration) || 30,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        examIcon: form.examIcon || "📝",
+        live: false,
+        published: false,
+        linkedQuestionCount,
+        geminiTopic: form.geminiTopic.trim(),
+        geminiDifficulty: form.geminiDifficulty,
+        ncertClass: form.ncertClass,
+        ncertSubject: form.ncertSubject,
+        ncertLessonNo: form.ncertLessonNo,
+        updatedAt: new Date().toISOString(),
+      };
 
       if (editingId) {
-
-        const testRef =
-          ref(
-            db,
-            `liveTests/${editingId}`
-          );
-
-        await update(
-          testRef,
-          {
-
-            testName:
-              form.testName.trim(),
-
-            examName:
-              form.examName.trim(),
-
-            testId:
-              form.testId.trim(),
-
-            questionSource:
-              form.questionSource,
-
-            questions:
-              form.questionSource === "json"
-                ? importedQuestions.slice(0, 150)
-                : null,
-
-            geminiTopic:
-              form.geminiTopic.trim(),
-
-            geminiDifficulty:
-              form.geminiDifficulty,
-
-            ncertClass:
-              form.ncertClass.trim(),
-
-            ncertSubject:
-              form.ncertSubject.trim(),
-
-            ncertLessonNo:
-              form.ncertLessonNo.trim(),
-
-            totalQuestions:
-              Number(
-                form.totalQuestions
-              ) ||
-              questionCount,
-
-            duration:
-              Number(
-                form.duration
-              ) || 30,
-
-            startTime:
-              form.startTime,
-
-            endTime:
-              form.endTime,
-
-            examIcon:
-              form.examIcon,
-
-            updatedAt:
-              new Date().toISOString(),
-
-          }
-        );
-
-        alert(
-          "✅ Live Test update हो गया।"
-        );
-
-      }
-
-      // =================================================
-      // CREATE
-      // =================================================
-
-      else {
-
-        const testsRef =
-          ref(
-            db,
-            "liveTests"
-          );
-
-        const newTestRef =
-          push(testsRef);
-
-        await set(
-          newTestRef,
-          {
-
-            testName:
-              form.testName.trim(),
-
-            examName:
-              form.examName.trim(),
-
-            // IMPORTANT
-            // Existing Test का Firebase ID
-            testId:
-              form.testId.trim(),
-
-            questionSource:
-              form.questionSource,
-
-            questions:
-              form.questionSource === "json"
-                ? importedQuestions.slice(0, 150)
-                : null,
-
-            geminiTopic:
-              form.geminiTopic.trim(),
-
-            geminiDifficulty:
-              form.geminiDifficulty,
-
-            ncertClass:
-              form.ncertClass.trim(),
-
-            ncertSubject:
-              form.ncertSubject.trim(),
-
-            ncertLessonNo:
-              form.ncertLessonNo.trim(),
-
-            totalQuestions:
-              Number(
-                form.totalQuestions
-              ) ||
-              questionCount,
-
-            duration:
-              Number(
-                form.duration
-              ) || 30,
-
-            startTime:
-              form.startTime,
-
-            endTime:
-              form.endTime,
-
-            examIcon:
-              form.examIcon,
-
-            live:
-              false,
-
-            published:
-              false,
-
-            participants:
-              0,
-
-            // Original Test के Questions की संख्या
-            linkedQuestionCount:
-              questionCount,
-
-            createdAt:
-              new Date().toISOString(),
-
-            updatedAt:
-              new Date().toISOString(),
-
-          }
-        );
-
-        alert(
-          `✅ Live Test create हो गया।\n\nLinked Questions: ${questionCount}`
-        );
+        await update(ref(db, `liveTests/${editingId}`), payload);
+        alert("✅ Live Test update हो गया।");
+      } else {
+        const newRef = push(ref(db, "liveTests"));
+        await set(newRef, { ...payload, participants: 0, createdAt: new Date().toISOString() });
+        alert("✅ Live Test create हो गया।");
       }
 
       resetForm();
-
     } catch (error) {
-
-      console.error(
-        "SAVE LIVE TEST ERROR:",
-        error
-      );
-
-      alert(
-        "❌ Live Test save नहीं हो पाया:\n" +
-          error.message
-      );
-
+      console.error(error);
+      alert(`❌ Live Test save नहीं हुआ:\n${error.message}`);
     } finally {
-
       setSaving(false);
+      setGenerating(false);
     }
   };
 
-  // =====================================================
-  // EDIT
-  // =====================================================
-
   const editTest = (test) => {
-
-    setEditingId(
-      test.id
-    );
-
+    setEditingId(test.id);
     setForm({
-
-      testName:
-        test.testName ||
-        "",
-
-      examName:
-        test.examName ||
-        "",
-
-      testId:
-        test.testId ||
-        "",
-
-      questionSource:
-        test.questionSource ||
-        "existing",
-
-      questionsJson:
-        test.questions
-          ? JSON.stringify(test.questions, null, 2)
-          : "",
-
-      geminiTopic:
-        test.geminiTopic ||
-        "",
-
-      geminiDifficulty:
-        test.geminiDifficulty ||
-        "Medium",
-
-      ncertClass:
-        test.ncertClass ||
-        "",
-
-      ncertSubject:
-        test.ncertSubject ||
-        "",
-
-      ncertLessonNo:
-        test.ncertLessonNo ||
-        "",
-
-      totalQuestions:
-        test.totalQuestions ||
-        25,
-
-      duration:
-        test.duration ||
-        30,
-
-      startTime:
-        test.startTime ||
-        "",
-
-      endTime:
-        test.endTime ||
-        "",
-
-      examIcon:
-        test.examIcon ||
-        "📝",
-
+      ...EMPTY_FORM,
+      ...test,
+      questionsJson: JSON.stringify(test.questions || [], null, 2),
+      totalQuestions: test.totalQuestions || 25,
+      duration: test.duration || 30,
+      questionSource: test.questionSource || (test.testId ? "existing" : "gemini"),
     });
-
-    window.scrollTo({
-      top: 0,
-      behavior:
-        "smooth",
-    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // =====================================================
-  // PUBLISH
-  // =====================================================
-
-  const publishTest =
-    async (test) => {
-
-      try {
-
-        if (!test.testId) {
-
-          alert(
-            "❌ Existing Test ID नहीं है।"
-          );
-
-          return;
-        }
-
-        await update(
-          ref(
-            db,
-            `liveTests/${test.id}`
-          ),
-          {
-            published:
-              true,
-          }
-        );
-
-        alert(
-          "🌐 Test User side पर publish हो गया।"
-        );
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-      }
-    };
-
-  // =====================================================
-  // UNPUBLISH
-  // =====================================================
-
-  const unpublishTest =
-    async (test) => {
-
-      try {
-
-        await update(
-          ref(
-            db,
-            `liveTests/${test.id}`
-          ),
-          {
-            published:
-              false,
-
-            live:
-              false,
-          }
-        );
-
-        alert(
-          "Test unpublish कर दिया गया।"
-        );
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-      }
-    };
-
-  // =====================================================
-  // START LIVE
-  // =====================================================
-
-  const startLive =
-    async (test) => {
-
-      if (!test.published) {
-
-        alert(
-          "पहले Test को Publish करें।"
-        );
-
-        return;
-      }
-
-      if (!test.testId) {
-
-        alert(
-          "❌ इस Live Test में Existing Test ID नहीं है।"
-        );
-
-        return;
-      }
-
-      try {
-
-        const sourceRef =
-          ref(
-            db,
-            `tests/${test.testId}`
-          );
-
-        const snapshot =
-          await get(
-            sourceRef
-          );
-
-        if (
-          !snapshot.exists()
-        ) {
-
-          alert(
-            "❌ Linked Existing Test नहीं मिला।"
-          );
-
-          return;
-        }
-
-        await update(
-          ref(
-            db,
-            `liveTests/${test.id}`
-          ),
-          {
-
-            live:
-              true,
-
-            startedAt:
-              new Date().toISOString(),
-
-          }
-        );
-
-        alert(
-          "🔴 Live Test START हो गया।"
-        );
-
-      } catch (error) {
-
-        alert(
-          "❌ " +
-            error.message
-        );
-      }
-    };
-
-  // =====================================================
-  // STOP LIVE
-  // =====================================================
-
-  const stopLive =
-    async (test) => {
-
-      try {
-
-        await update(
-          ref(
-            db,
-            `liveTests/${test.id}`
-          ),
-          {
-
-            live:
-              false,
-
-            stoppedAt:
-              new Date().toISOString(),
-
-          }
-        );
-
-        alert(
-          "Live Test STOP हो गया।"
-        );
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-      }
-    };
-
-  // =====================================================
-  // DELETE
-  // =====================================================
-
-  const deleteTest =
-    async (test) => {
-
-      const ok =
-        window.confirm(
-          `"${test.testName}" को delete करना चाहते हैं?`
-        );
-
-      if (!ok) return;
-
-      try {
-
-        await remove(
-          ref(
-            db,
-            `liveTests/${test.id}`
-          )
-        );
-
-        alert(
-          "Test delete हो गया।"
-        );
-
-      } catch (error) {
-
-        alert(
-          error.message
-        );
-      }
-    };
-
-  // =====================================================
-  // STATUS
-  // =====================================================
-
-  const getStatus =
-    (test) => {
-
-      const now =
-        Date.now();
-
-      const start =
-        test.startTime
-          ? new Date(
-              test.startTime
-            ).getTime()
-          : 0;
-
-      const end =
-        test.endTime
-          ? new Date(
-              test.endTime
-            ).getTime()
-          : 0;
-
-      if (
-        test.live &&
-        (!end ||
-          now <= end)
-      ) {
-        return "LIVE";
-      }
-
-      if (
-        start &&
-        now < start
-      ) {
-        return "UPCOMING";
-      }
-
-      if (
-        end &&
-        now > end
-      ) {
-        return "ENDED";
-      }
-
-      return "OFF";
-    };
-
-  // =====================================================
-  // FORMAT DATE
-  // =====================================================
-
-  const formatDate =
-    (date) => {
-
-      if (!date)
-        return "-";
-
-      try {
-
-        return new Date(
-          date
-        ).toLocaleString(
-          "hi-IN",
-          {
-            dateStyle:
-              "medium",
-
-            timeStyle:
-              "short",
-          }
-        );
-
-      } catch {
-
-        return date;
-      }
-    };
-
-  // =====================================================
-  // UI
-  // =====================================================
+  const publishTest = async (test) => {
+    try {
+      await update(ref(db, `liveTests/${test.id}`), { published: !test.published, updatedAt: new Date().toISOString() });
+    } catch (error) { alert(error.message); }
+  };
+
+  const startLive = async (test) => {
+    const now = Date.now();
+    const start = test.startTime ? new Date(test.startTime).getTime() : 0;
+    const end = test.endTime ? new Date(test.endTime).getTime() : 0;
+    if (start && now < start) return alert("⏰ Start Time अभी नहीं आया है।");
+    if (end && now > end) return alert("❌ End Time निकल चुका है।");
+    try {
+      await update(ref(db, `liveTests/${test.id}`), { live: true, published: true, startedAt: new Date().toISOString() });
+      alert("🔴 Live Test START हो गया।");
+    } catch (error) { alert(error.message); }
+  };
+
+  const stopLive = async (test) => {
+    try {
+      await update(ref(db, `liveTests/${test.id}`), { live: false, stoppedAt: new Date().toISOString() });
+      alert("⏹️ Live Test STOP हो गया।");
+    } catch (error) { alert(error.message); }
+  };
+
+  const deleteTest = async (test) => {
+    if (!window.confirm(`"${test.testName}" को delete करना चाहते हैं?`)) return;
+    try { await remove(ref(db, `liveTests/${test.id}`)); }
+    catch (error) { alert(error.message); }
+  };
+
+  const getStatus = (test) => {
+    const now = Date.now();
+    const start = test.startTime ? new Date(test.startTime).getTime() : 0;
+    const end = test.endTime ? new Date(test.endTime).getTime() : 0;
+    if (test.live && (!end || now <= end)) return "LIVE";
+    if (start && now < start) return "UPCOMING";
+    if (end && now > end) return "ENDED";
+    return "OFF";
+  };
+
+  const formatDate = (value) => {
+    if (!value) return "-";
+    try { return new Date(value).toLocaleString("hi-IN", { dateStyle: "medium", timeStyle: "short" }); }
+    catch { return String(value); }
+  };
 
   return (
     <div className="admin-live-container">
-
-      {/* HEADER */}
-
       <div className="admin-live-header">
-
         <div>
-
-          <h2>
-            🔴 Live Test Management
-          </h2>
-
-          <p>
-            Live Test बनाएँ और
-            Start / Stop करें
-          </p>
-
+          <h2>🔴 Live Test Management</h2>
+          <p>Questions Zone, JSON, Gemini और NCERT से Live Test तैयार करें।</p>
         </div>
-
       </div>
 
-      {/* FORM */}
-
-      <form
-        className="admin-live-form"
-        onSubmit={saveTest}
-      >
-
-        <div className="form-title">
-
-          {editingId
-            ? "✏️ Live Test Edit करें"
-            : "➕ नया Live Test"}
-
-        </div>
+      <form className="admin-live-form" onSubmit={saveTest}>
+        <div className="form-title">{editingId ? "✏️ Live Test Edit करें" : "➕ नया Live Test"}</div>
 
         <div className="admin-form-grid">
-
-          {/* TEST NAME */}
+          <div className="admin-field">
+            <label>Test Name *</label>
+            <input name="testName" value={form.testName} onChange={handleChange} placeholder="जैसे UPPCS Live Test 01" />
+          </div>
 
           <div className="admin-field">
-
-            <label>
-              Test Name *
-            </label>
-
-            <input
-              type="text"
-              name="testName"
-              value={
-                form.testName
-              }
-              onChange={
-                handleChange
-              }
-              placeholder="जैसे UP PET Live Test"
-            />
-
+            <label>Exam Name *</label>
+            <input name="examName" value={form.examName} onChange={handleChange} placeholder="जैसे UPPCS 2026" />
           </div>
 
-          {/* EXAM */}
-
-          <div className="admin-field">
-
-            <label>
-              Exam Name *
-            </label>
-
-            <input
-              type="text"
-              name="examName"
-              value={
-                form.examName
-              }
-              onChange={
-                handleChange
-              }
-              placeholder="जैसे UP PET 2026"
-            />
-
-          </div>
-
-          {/* EXISTING TEST ID */}
-
-          <div
-            className="admin-field"
-            style={{
-              gridColumn:
-                "1 / -1",
-            }}
-          >
-
-            <label>
-              Existing Test ID *
-            </label>
-
-            <div
-              style={{
-                display:
-                  "flex",
-                gap: 8,
-              }}
-            >
-
-              <input
-                type="text"
-                name="testId"
-                value={
-                  form.testId
-                }
-                onChange={
-                  handleChange
-                }
-                placeholder="Firebase tests का ID"
-                style={{
-                  flex: 1,
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={
-                  checkExistingTest
-                }
-                disabled={
-                  checkingTest
-                }
-                style={{
-                  padding:
-                    "10px 14px",
-                  border:
-                    "none",
-                  borderRadius:
-                    8,
-                  cursor:
-                    "pointer",
-                  fontWeight:
-                    700,
-                }}
-              >
-                {checkingTest
-                  ? "Checking..."
-                  : "🔍 Check"}
-              </button>
-
-            </div>
-
-            <small
-              style={{
-                display:
-                  "block",
-                marginTop:
-                  6,
-                color:
-                  "#64748b",
-              }}
-            >
-              इसी Test के Questions
-              Live Test में खुलेंगे।
-            </small>
-
-          </div>
-
-          {/* QUESTION SOURCE */}
-
-          <div
-            className="admin-field"
-            style={{ gridColumn: "1 / -1" }}
-          >
-            <label>Question Source *</label>
-            <select
-              name="questionSource"
-              value={form.questionSource}
-              onChange={handleChange}
-            >
+          <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+            <label>📝 Question Source *</label>
+            <select name="questionSource" value={form.questionSource} onChange={handleChange}>
               <option value="existing">📚 Questions Zone / Existing Test</option>
-              <option value="json">🧩 Questions Zone JSON</option>
-              <option value="gemini">🤖 Gemini AI Questions</option>
-              <option value="ncert">📖 NCERT</option>
+              <option value="json">🧩 Questions JSON</option>
+              <option value="gemini">🤖 Gemini AI</option>
+              <option value="ncert">📖 NCERT + Gemini</option>
             </select>
+          </div>
 
-            {form.questionSource === "existing" && (
-              <small>Existing Test ID से questions आएँगे।</small>
-            )}
-
-            {form.questionSource === "json" && (
-              <textarea
-                name="questionsJson"
-                value={form.questionsJson}
-                onChange={handleChange}
-                rows={8}
-                placeholder='[{"question":"...","options":["A","B","C","D"],"answer":0,"explanation":"..."}]'
-                style={{ width: "100%", marginTop: 8, fontFamily: "monospace" }}
-              />
-            )}
-
-            {form.questionSource === "gemini" && (
-              <div className="admin-form-grid" style={{ marginTop: 10 }}>
-                <div className="admin-field">
-                  <label>Gemini Topic</label>
-                  <input name="geminiTopic" value={form.geminiTopic} onChange={handleChange} placeholder="जैसे UPPCS Polity" />
-                </div>
-                <div className="admin-field">
-                  <label>Difficulty</label>
-                  <select name="geminiDifficulty" value={form.geminiDifficulty} onChange={handleChange}>
-                    <option>Easy</option>
-                    <option>Medium</option>
-                    <option>Hard</option>
-                  </select>
-                </div>
+          {form.questionSource === "existing" && (
+            <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+              <label>Existing Test ID *</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input name="testId" value={form.testId} onChange={handleChange} placeholder="Firebase tests/ के अंदर वाला Test ID" />
+                <button type="button" onClick={checkExistingTest} disabled={checkingTest}>{checkingTest ? "Checking..." : "🔎 Check"}</button>
               </div>
-            )}
-
-            {form.questionSource === "ncert" && (
-              <div className="admin-form-grid" style={{ marginTop: 10 }}>
-                <div className="admin-field">
-                  <label>Class</label>
-                  <input name="ncertClass" value={form.ncertClass} onChange={handleChange} placeholder="Class 6" />
-                </div>
-                <div className="admin-field">
-                  <label>Subject</label>
-                  <input name="ncertSubject" value={form.ncertSubject} onChange={handleChange} placeholder="History" />
-                </div>
-                <div className="admin-field">
-                  <label>Lesson No.</label>
-                  <input name="ncertLessonNo" value={form.ncertLessonNo} onChange={handleChange} placeholder="1" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ICON */}
-
-          <div className="admin-field">
-
-            <label>
-              Icon
-            </label>
-
-            <input
-              type="text"
-              name="examIcon"
-              value={
-                form.examIcon
-              }
-              onChange={
-                handleChange
-              }
-              placeholder="📝"
-            />
-
-          </div>
-
-          {/* QUESTIONS */}
-
-          <div className="admin-field">
-
-            <label>
-              Total Questions
-            </label>
-
-            <input
-              type="number"
-              name="totalQuestions"
-              value={
-                form.totalQuestions
-              }
-              onChange={
-                handleChange
-              }
-              min="1"
-            />
-
-          </div>
-
-          {/* DURATION */}
-
-          <div className="admin-field">
-
-            <label>
-              Duration (Minutes)
-            </label>
-
-            <input
-              type="number"
-              name="duration"
-              value={
-                form.duration
-              }
-              onChange={
-                handleChange
-              }
-              min="1"
-            />
-
-          </div>
-
-          {/* START */}
-
-          <div className="admin-field">
-
-            <label>
-              Start Time *
-            </label>
-
-            <input
-              type="datetime-local"
-              name="startTime"
-              value={
-                form.startTime
-              }
-              onChange={
-                handleChange
-              }
-            />
-
-          </div>
-
-          {/* END */}
-
-          <div className="admin-field">
-
-            <label>
-              End Time *
-            </label>
-
-            <input
-              type="datetime-local"
-              name="endTime"
-              value={
-                form.endTime
-              }
-              onChange={
-                handleChange
-              }
-            />
-
-          </div>
-
-        </div>
-
-        {/* BUTTONS */}
-
-        <div className="admin-form-buttons">
-
-          <button
-            type="submit"
-            className="save-live-btn"
-            disabled={
-              saving
-            }
-          >
-
-            {saving
-              ? "Saving..."
-              : editingId
-              ? "💾 Update Test"
-              : "➕ Create Live Test"}
-
-          </button>
-
-          {editingId && (
-
-            <button
-              type="button"
-              className="cancel-live-btn"
-              onClick={
-                resetForm
-              }
-            >
-              Cancel
-            </button>
-
+              <small>Questions Zone में बने Test का ID यहाँ डालें।</small>
+            </div>
           )}
 
+          {form.questionSource === "json" && (
+            <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+              <label>Questions JSON *</label>
+              <textarea name="questionsJson" value={form.questionsJson} onChange={handleChange} rows={10} placeholder='[{"question":"...","options":["A","B","C","D"],"answer":0,"explanation":"..."}]' />
+            </div>
+          )}
+
+          {(form.questionSource === "gemini" || form.questionSource === "ncert") && (
+            <>
+              <div className="admin-field">
+                <label>Gemini Topic</label>
+                <input name="geminiTopic" value={form.geminiTopic} onChange={handleChange} placeholder="जैसे भारतीय संविधान" />
+              </div>
+              <div className="admin-field">
+                <label>Difficulty</label>
+                <select name="geminiDifficulty" value={form.geminiDifficulty} onChange={handleChange}>
+                  <option>Easy</option><option>Medium</option><option>Hard</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {form.questionSource === "ncert" && (
+            <>
+              <div className="admin-field"><label>📖 NCERT Class</label><input name="ncertClass" value={form.ncertClass} onChange={handleChange} placeholder="Class 6 / 7 / 8..." /></div>
+              <div className="admin-field"><label>📚 Subject</label><input name="ncertSubject" value={form.ncertSubject} onChange={handleChange} placeholder="History / Science..." /></div>
+              <div className="admin-field"><label>Lesson / Chapter No.</label><input name="ncertLessonNo" value={form.ncertLessonNo} onChange={handleChange} placeholder="जैसे 03" /></div>
+            </>
+          )}
+
+          <div className="admin-field"><label>Total Questions *</label><input type="number" min="1" max="150" name="totalQuestions" value={form.totalQuestions} onChange={handleChange} /></div>
+          <div className="admin-field"><label>Duration (Minutes) *</label><input type="number" min="1" name="duration" value={form.duration} onChange={handleChange} /></div>
+          <div className="admin-field"><label>Exam Icon</label><input name="examIcon" value={form.examIcon} onChange={handleChange} /></div>
+          <div className="admin-field"><label>Start Time *</label><input type="datetime-local" name="startTime" value={form.startTime} onChange={handleChange} /></div>
+          <div className="admin-field"><label>End Time *</label><input type="datetime-local" name="endTime" value={form.endTime} onChange={handleChange} /></div>
         </div>
 
+        <div className="admin-form-buttons">
+          <button type="submit" className="save-live-btn" disabled={saving || generating}>
+            {generating ? "🤖 Gemini Questions बना रहा है..." : saving ? "Saving..." : editingId ? "💾 Update Test" : "➕ Create Live Test"}
+          </button>
+          {editingId && <button type="button" className="cancel-live-btn" onClick={resetForm}>Cancel</button>}
+        </div>
       </form>
 
-      {/* LIST */}
-
       <div className="admin-live-list">
-
-        <div className="admin-list-title">
-          📋 Live Tests
-        </div>
-
-        {tests.length === 0 ? (
-
-          <div className="admin-empty">
-            अभी कोई Live Test
-            नहीं बनाया गया है।
-          </div>
-
-        ) : (
-
-          tests.map(
-            (test) => {
-
-              const status =
-                getStatus(test);
-
-              return (
-
-                <div
-                  className="admin-test-card"
-                  key={test.id}
-                >
-
-                  <div className="admin-test-main">
-
-                    <div className="admin-test-icon">
-                      {test.examIcon ||
-                        "📝"}
-                    </div>
-
-                    <div className="admin-test-details">
-
-                      <h3>
-                        {test.testName}
-                      </h3>
-
-                      <p>
-                        📚{" "}
-                        {test.examName}
-                      </p>
-
-                      <p>
-                        🆔 Test ID:{" "}
-                        {test.testId ||
-                          "—"}
-                      </p>
-
-                      <p>
-                        📝{" "}
-                        {
-                          test.totalQuestions ||
-                          0
-                        }{" "}
-                        Questions
-                        &nbsp; | &nbsp;
-                        ⏱️{" "}
-                        {
-                          test.duration ||
-                          0
-                        }{" "}
-                        Min
-                      </p>
-
-                      {test.linkedQuestionCount !==
-                        undefined && (
-
-                        <p>
-                          🔗 Linked Questions:{" "}
-                          {
-                            test.linkedQuestionCount
-                          }
-                        </p>
-
-                      )}
-
-                      <p>
-                        🟢 Start:{" "}
-                        {formatDate(
-                          test.startTime
-                        )}
-                      </p>
-
-                      <p>
-                        🔴 End:{" "}
-                        {formatDate(
-                          test.endTime
-                        )}
-                      </p>
-
-                    </div>
-
-                    <div
-                      className={`admin-test-status ${status.toLowerCase()}`}
-                    >
-
-                      {status ===
-                        "LIVE"
-                        ? "🔴 LIVE"
-                        : status ===
-                          "UPCOMING"
-                        ? "⏰ UPCOMING"
-                        : status ===
-                          "ENDED"
-                        ? "⚫ ENDED"
-                        : "⚪ OFF"}
-
-                    </div>
-
-                  </div>
-
-                  {/* ACTIONS */}
-
-                  <div className="admin-test-actions">
-
-                    {!test.published ? (
-
-                      <button
-                        className="publish-btn"
-                        onClick={() =>
-                          publishTest(
-                            test
-                          )
-                        }
-                      >
-                        🌐 Publish
-                      </button>
-
-                    ) : (
-
-                      <button
-                        className="unpublish-btn"
-                        onClick={() =>
-                          unpublishTest(
-                            test
-                          )
-                        }
-                      >
-                        🚫 Unpublish
-                      </button>
-
-                    )}
-
-                    {!test.live ? (
-
-                      <button
-                        className="start-btn"
-                        onClick={() =>
-                          startLive(
-                            test
-                          )
-                        }
-                      >
-                        🔴 Start Live
-                      </button>
-
-                    ) : (
-
-                      <button
-                        className="stop-btn"
-                        onClick={() =>
-                          stopLive(
-                            test
-                          )
-                        }
-                      >
-                        ⏹ Stop Live
-                      </button>
-
-                    )}
-
-                    <button
-                      className="edit-btn"
-                      onClick={() =>
-                        editTest(
-                          test
-                        )
-                      }
-                    >
-                      ✏️ Edit
-                    </button>
-
-                    <button
-                      className="delete-btn"
-                      onClick={() =>
-                        deleteTest(
-                          test
-                        )
-                      }
-                    >
-                      🗑 Delete
-                    </button>
-
-                  </div>
-
+        <div className="admin-list-title">📋 Live Tests</div>
+        {tests.length === 0 ? <div className="admin-empty">अभी कोई Live Test नहीं है।</div> : tests.map((test) => {
+          const status = getStatus(test);
+          return (
+            <div className="admin-test-card" key={test.id}>
+              <div className="admin-test-main">
+                <div className="admin-test-icon">{test.examIcon || "📝"}</div>
+                <div className="admin-test-details">
+                  <h3>{test.testName}</h3>
+                  <p>📚 {test.examName}</p>
+                  <p>📝 Source: {test.questionSource || "existing"} · {test.totalQuestions || 0} Questions · ⏱️ {test.duration || 0} Min</p>
+                  <p>🆔 Test ID: {test.testId || "—"}</p>
+                  <p>🟢 Start: {formatDate(test.startTime)}</p>
+                  <p>🔴 End: {formatDate(test.endTime)}</p>
+                  <p>👥 Participants: {test.participants || 0}</p>
                 </div>
+                <div className={`admin-test-status ${status.toLowerCase()}`}>{status === "LIVE" ? "🔴 LIVE" : status === "UPCOMING" ? "⏰ UPCOMING" : status === "ENDED" ? "⚫ ENDED" : "⚪ OFF"}</div>
+              </div>
 
-              );
-            }
-          )
-
-        )}
-
+              <div className="admin-test-actions">
+                <button type="button" onClick={() => editTest(test)}>✏️ Edit</button>
+                <button type="button" onClick={() => publishTest(test)}>{test.published ? "🙈 Unpublish" : "📢 Publish"}</button>
+                {!test.live ? <button type="button" onClick={() => startLive(test)}>🔴 Start</button> : <button type="button" onClick={() => stopLive(test)}>⏹️ Stop</button>}
+                <button type="button" onClick={() => deleteTest(test)}>🗑️ Delete</button>
+              </div>
+            </div>
+          );
+        })}
       </div>
-
     </div>
   );
-};
-
-export default AdminLiveTest;
+}
