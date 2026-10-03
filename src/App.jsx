@@ -28,9 +28,7 @@ import CurrentAffairs from "./pages/CurrentAffairs";
 import TestSeries from "./pages/TestSeries";
 import TestRunner from "./components/TestRunner";
 import LiveTest from "./components/LiveTest";
-import LiveGeminiTest from "./components/LiveGeminiTest";
 import AdminLiveTest from "./components/AdminLiveTest";
-import AnnouncementAdmin from "./components/AnnouncementAdmin";
 import NCERTAdmin from "./components/NCERTAdmin";
 import NCERTLibrary from "./components/NCERTLibrary";
 import Subscription from "./pages/Subscription";
@@ -2254,12 +2252,6 @@ export default function App() {
     setSelectedTest,
   ] = useState(null);
 
-  // Live Gemini Test के लिए चुना गया Live Test
-  const [
-    selectedLiveTest,
-    setSelectedLiveTest,
-  ] = useState(null);
-
   // Home से चुना गया Exam (जैसे uppet / uppcs)
   const [
     selectedExam,
@@ -2433,18 +2425,12 @@ export default function App() {
 
       setAuthPage(null);
 
-      // Login के बाद pending Live Test या normal Test खोलें।
+      // अगर Login Test Start के लिए कराया गया था,
+      // तो Login के बाद वही Test खोलें।
       if (pendingTest) {
         const testToOpen = pendingTest;
         setPendingTest(null);
-
-        if (testToOpen?.__live) {
-          setSelectedLiveTest(testToOpen);
-          setScreen("live-gemini");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        } else {
-          handleStartTest(testToOpen);
-        }
+        handleStartTest(testToOpen);
       } else {
         setScreen("home");
       }
@@ -2604,9 +2590,10 @@ export default function App() {
   };
 
   const protectedNavigate = (targetScreen) => {
-    // Test Series और Live Test list बिना Login के देख सकते हैं।
+    // Test Series को बिना Login के देख सकते हैं।
     if (targetScreen === "tests" || targetScreen === "live-tests") {
       setScreen(targetScreen);
+      setAuthPage(null);
       return;
     }
 
@@ -2695,9 +2682,8 @@ export default function App() {
                   🔑 Password Reset
                 </button>
 
-                <button type="button" onClick={() => setScreen("announcement-admin")}>📢 Notifications</button>
+                <button type="button" onClick={() => setScreen("live-test-admin")}>🔴 Live Test</button>
                 <button type="button" onClick={() => setScreen("ncert-admin")}>📚 NCERT PDFs</button>
-                <button type="button" onClick={() => setScreen("live-test-admin")}>🔴 Live Tests</button>
 
                 <button
                   type="button"
@@ -2730,24 +2716,6 @@ export default function App() {
       }
 
       /* ================================================
-         ANNOUNCEMENT ADMIN
-      ================================================ */
-
-      if (screen === "announcement-admin") {
-        if (!isAdmin) return <AdminLogin onSuccess={(user)=>{setFirebaseUser(user);setScreen("announcement-admin");setAuthPage(null);}} onBack={()=>setScreen("home")} />;
-        return <AnnouncementAdmin onBack={()=>setScreen("admin")} />;
-      }
-
-      /* ================================================
-         NCERT ADMIN
-      ================================================ */
-
-      if (screen === "ncert-admin") {
-        if (!isAdmin) return <AdminLogin onSuccess={(user)=>{setFirebaseUser(user);setScreen("ncert-admin");setAuthPage(null);}} onBack={()=>setScreen("home")} />;
-        return <NCERTAdmin onBack={()=>setScreen("admin")} />;
-      }
-
-      /* ================================================
          LIVE TEST ADMIN
       ================================================ */
 
@@ -2757,8 +2725,8 @@ export default function App() {
             <AdminLogin
               onSuccess={(user) => {
                 setFirebaseUser(user);
-                setAuthPage(null);
                 setScreen("live-test-admin");
+                setAuthPage(null);
               }}
               onBack={() => setScreen("home")}
             />
@@ -2768,16 +2736,31 @@ export default function App() {
         return (
           <div>
             <div className="admin-topbar">
-              <strong>🔴 {APP_NAME} Live Test Admin</strong>
+              <strong>🔴 {APP_NAME} Live Test</strong>
               <div>
-                <button type="button" onClick={() => setScreen("admin")}>← Admin Panel</button>
-                <button type="button" onClick={() => setScreen("home")}>🏠 Website</button>
-                <button type="button" onClick={logout}>Logout</button>
+                <button type="button" onClick={() => setScreen("admin")}>
+                  ← Admin Panel
+                </button>
+                <button type="button" onClick={() => setScreen("home")}>
+                  🏠 Website
+                </button>
+                <button type="button" onClick={logout}>
+                  Logout
+                </button>
               </div>
             </div>
             <AdminLiveTest />
           </div>
         );
+      }
+
+      /* ================================================
+         NCERT ADMIN
+      ================================================ */
+
+      if (screen === "ncert-admin") {
+        if (!isAdmin) return <AdminLogin onSuccess={(user)=>{setFirebaseUser(user);setScreen("ncert-admin");setAuthPage(null);}} onBack={()=>setScreen("home")} />;
+        return <NCERTAdmin onBack={()=>setScreen("admin")} />;
       }
 
       /* ================================================
@@ -2877,7 +2860,8 @@ export default function App() {
 
       if (
         !firebaseUser &&
-        screen !== "home"
+        screen !== "home" &&
+        screen !== "live-tests"
       ) {
 
         return null;
@@ -2976,7 +2960,7 @@ export default function App() {
       }
 
       /* ================================================
-         LIVE TEST LIST
+         LIVE TEST
       ================================================ */
 
       if (screen === "live-tests") {
@@ -2984,36 +2968,17 @@ export default function App() {
           <LiveTest
             onBack={() => setScreen("home")}
             onJoinTest={(test) => {
-              if (!firebaseUser) {
-                setPendingTest({ ...test, __live: true });
-                setAuthPage("login");
-                return;
-              }
-
-              setSelectedLiveTest(test);
-              setScreen("live-gemini");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-          />
-        );
-      }
-
-      /* ================================================
-         LIVE GEMINI RUNNER
-      ================================================ */
-
-      if (screen === "live-gemini") {
-        if (!selectedLiveTest) {
-          setScreen("live-tests");
-          return null;
-        }
-
-        return (
-          <LiveGeminiTest
-            test={selectedLiveTest}
-            onBack={() => {
-              setSelectedLiveTest(null);
-              setScreen("live-tests");
+              const normalized = {
+                ...(test?.raw || test || {}),
+                id: test?.testId || test?.id,
+                title: test?.testName || test?.title || "Live Test",
+                exam: test?.examName || test?.exam || "",
+                examId: test?.examId || test?.exam || "",
+                testNumber: test?.testNumber ?? test?.testNo ?? 1,
+                durationMinutes: test?.durationMinutes ?? test?.duration ?? 30,
+                questions: test?.questions || [],
+              };
+              handleStartTest(normalized);
             }}
           />
         );
@@ -3136,7 +3101,6 @@ export default function App() {
       userData,
       isAdmin,
       selectedTest,
-      selectedLiveTest,
       selectedExam,
       pendingTest,
     ]);
@@ -3180,10 +3144,7 @@ export default function App() {
       ================================================= */}
 
       {!firebaseUser &&
-        !authPage &&
-        screen !== "live-tests" &&
-        screen !== "live-gemini" &&
-        screen !== "live-test-admin" && (
+        !authPage && (
           <LoginRequiredPage
             onLogin={() =>
               setAuthPage(
