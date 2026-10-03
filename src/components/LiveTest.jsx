@@ -180,9 +180,18 @@ const LiveTest = ({ onJoinTest }) => {
           ""
         ).trim();
 
-      if (!linkedTestId) {
+      const hasSavedQuestions =
+        Array.isArray(test?.questions) &&
+        test.questions.length > 0;
+
+      const isGeminiTest =
+        String(test?.questionSource || "").toLowerCase() === "gemini";
+
+      // Questions पहले से Live Test में saved हैं तो Existing Test ID जरूरी नहीं।
+      // Gemini mode में भी Existing Test ID optional है।
+      if (!linkedTestId && !hasSavedQuestions && !isGeminiTest) {
         alert(
-          "❌ इस Live Test में Existing Test ID नहीं है।\n\nAdmin Panel में इस Test को Edit करके Existing Test ID डालें।"
+          "❌ इस Live Test में Question Source सेट नहीं है।\n\nExisting Test ID दें, Questions save करें या Gemini mode चुनें।"
         );
 
         setJoining(false);
@@ -200,28 +209,31 @@ const LiveTest = ({ onJoinTest }) => {
       );
 
       // =================================================
-      // Firebase से Existing Test पढ़ें
+      // Firebase से Existing Test पढ़ें (यदि ID दी गई है)
       // =================================================
 
-      const testRef = ref(
-        db,
-        `tests/${linkedTestId}`
-      );
+      let existingTest = {};
 
-      const snapshot =
-        await get(testRef);
-
-      if (!snapshot.exists()) {
-        alert(
-          "❌ Linked Test नहीं मिला।\n\nExisting Test ID गलत है।"
+      if (linkedTestId) {
+        const testRef = ref(
+          db,
+          `tests/${linkedTestId}`
         );
 
-        setJoining(false);
-        return;
-      }
+        const snapshot =
+          await get(testRef);
 
-      const existingTest =
-        snapshot.val();
+        if (!snapshot.exists()) {
+          alert(
+            "❌ Linked Test नहीं मिला।\n\nExisting Test ID गलत है।"
+          );
+
+          setJoining(false);
+          return;
+        }
+
+        existingTest = snapshot.val() || {};
+      }
 
       console.log(
         "EXISTING TEST:",
@@ -230,9 +242,14 @@ const LiveTest = ({ onJoinTest }) => {
 
       // =================================================
       // QUESTIONS
+      // पहले Live Test में saved questions देखें।
+      // यदि नहीं हैं तो linked Existing Test से लें।
+      // Gemini mode में questions खाली हो सकते हैं;
+      // तब LiveGeminiTest /api/mcq से questions बनाएगा।
       // =================================================
 
       let questions =
+        test?.questions ||
         existingTest?.questions;
 
       if (
@@ -275,12 +292,11 @@ const LiveTest = ({ onJoinTest }) => {
       );
 
       if (
-        questions.length === 0
+        questions.length === 0 &&
+        !isGeminiTest
       ) {
         alert(
-          "❌ इस Linked Test में कोई Question नहीं मिला।\n\nFirebase में tests/" +
-            linkedTestId +
-            " के अंदर questions check करें।"
+          "❌ इस Live Test में कोई Question नहीं मिला।\n\nQuestions Zone/Existing Test में Questions जोड़ें या Gemini mode चुनें।"
         );
 
         setJoining(false);
@@ -295,8 +311,13 @@ const LiveTest = ({ onJoinTest }) => {
         // Existing Test की सारी information
         ...existingTest,
 
+        // Live Test में saved questions को priority
+        ...(Array.isArray(test?.questions) && test.questions.length
+          ? { questions: test.questions }
+          : {}),
+
         // Existing Firebase ID
-        id: linkedTestId,
+        id: linkedTestId || test.id,
 
         // Live Test की information
         liveTestId:
@@ -349,6 +370,11 @@ const LiveTest = ({ onJoinTest }) => {
             existingTest.duration ||
             30
           ),
+
+        // Source metadata
+        questionSource:
+          test.questionSource ||
+          (test.questions?.length ? "questions" : "existing"),
 
         durationMinutes:
           Number(
