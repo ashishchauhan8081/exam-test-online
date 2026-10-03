@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "../App.css";
 import "./AdminPanel.css";
+import NCERTAdmin from "../components/NCERTAdmin";
 
 import {
   getApps,
@@ -1505,6 +1506,22 @@ export default function AdminPanel({
           📚 Resources
         </button>
 
+        <button
+          className={
+            activeSection ===
+            "ncert"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setActiveSection(
+              "ncert"
+            )
+          }
+        >
+          📖 NCERT Books
+        </button>
+
       </div>
 
       {/* ==================================================
@@ -2587,6 +2604,18 @@ export default function AdminPanel({
 
           </div>
 
+        </div>
+      )}
+
+      {/* ==================================================
+          NCERT SECTION
+      ================================================== */}
+
+      {activeSection === "ncert" && (
+        <div className="admin-content">
+          <NCERTAdmin
+            onBack={() => setActiveSection("resources")}
+          />
         </div>
       )}
 
