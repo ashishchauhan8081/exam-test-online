@@ -35,6 +35,8 @@ import AIMCQGenerator from "./components/AIMCQGenerator";
 import CurrentAffairs from "./pages/CurrentAffairs";
 import TestSeries from "./pages/TestSeries";
 import TestRunner from "./components/TestRunner";
+import LiveTest from "./pages/LiveTest";
+import LiveGeminiTest from "./components/LiveGeminiTest";
 
 /* ======================================================
    FIREBASE
@@ -2015,6 +2017,15 @@ function HomePage({
             </small>
           </button>
 
+          <button
+            type="button"
+            onClick={() => onNavigate("live-tests")}
+          >
+            <span>🔴</span>
+            <strong>Live Test</strong>
+            <small>अभी चल रहे टेस्ट</small>
+          </button>
+
         </section>
 
       </main>
@@ -2209,6 +2220,12 @@ export default function App() {
     setSelectedTest,
   ] = useState(null);
 
+  // Live Test के लिए अलग runner state
+  const [
+    selectedLiveTest,
+    setSelectedLiveTest,
+  ] = useState(null);
+
   // Home से चुना गया Exam (जैसे uppet / uppcs)
   const [
     selectedExam,
@@ -2387,7 +2404,14 @@ export default function App() {
       if (pendingTest) {
         const testToOpen = pendingTest;
         setPendingTest(null);
-        handleStartTest(testToOpen);
+
+        if (testToOpen?.__live) {
+          setSelectedLiveTest(testToOpen);
+          setScreen("live-test");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          handleStartTest(testToOpen);
+        }
       } else {
         setScreen("home");
       }
@@ -2501,6 +2525,7 @@ export default function App() {
         test?.duration ??
         30,
       questions:
+        test?.questions ??
         raw?.questions ??
         [],
     };
@@ -2518,6 +2543,11 @@ export default function App() {
   const handleBackFromTest = () => {
     setSelectedTest(null);
     setScreen("tests");
+  };
+
+  const handleBackFromLiveTest = () => {
+    setSelectedLiveTest(null);
+    setScreen("live-tests");
   };
 
   /* ====================================================
@@ -2548,8 +2578,11 @@ export default function App() {
 
   const protectedNavigate = (targetScreen) => {
     // Test Series को बिना Login के देख सकते हैं।
-    if (targetScreen === "tests") {
-      setScreen("tests");
+    if (
+      targetScreen === "tests" ||
+      targetScreen === "live-tests"
+    ) {
+      setScreen(targetScreen);
       return;
     }
 
@@ -2760,6 +2793,63 @@ export default function App() {
       }
 
       /* ================================================
+         LIVE TEST
+      ================================================ */
+
+      if (screen === "live-test") {
+        if (!selectedLiveTest) {
+          return (
+            <div className="page-container">
+              <button type="button" className="back-btn" onClick={() => setScreen("home")}>
+                ← Home
+              </button>
+              <LiveTest
+                onJoinTest={(test) => {
+                  if (!firebaseUser) {
+                    setPendingTest({ ...test, __live: true });
+                    setAuthPage("login");
+                    return;
+                  }
+                  setSelectedLiveTest(test);
+                  setScreen("live-test");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              />
+            </div>
+          );
+        }
+
+        return (
+          <LiveGeminiTest
+            test={selectedLiveTest}
+            onBack={handleBackFromLiveTest}
+          />
+        );
+      }
+
+      if (screen === "live-tests") {
+        return (
+          <div className="page-container">
+            <button type="button" className="back-btn" onClick={() => setScreen("home")}>
+              ← Home
+            </button>
+            <LiveTest
+              onJoinTest={(test) => {
+                if (!firebaseUser) {
+                  setPendingTest({ ...test, __live: true });
+                  setAuthPage("login");
+                  return;
+                }
+                setSelectedLiveTest(test);
+                setScreen("live-test");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            />
+          </div>
+        );
+      }
+
+      /* ================================================
          PROTECTED PAGES
       ================================================ */
 
@@ -2965,6 +3055,7 @@ export default function App() {
       userData,
       isAdmin,
       selectedTest,
+      selectedLiveTest,
       selectedExam,
       pendingTest,
     ]);
