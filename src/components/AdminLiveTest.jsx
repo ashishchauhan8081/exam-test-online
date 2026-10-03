@@ -20,6 +20,13 @@ const AdminLiveTest = () => {
     testName: "",
     examName: "",
     testId: "",
+    questionSource: "existing",
+    questionsJson: "",
+    geminiTopic: "",
+    geminiDifficulty: "Medium",
+    ncertClass: "",
+    ncertSubject: "",
+    ncertLessonNo: "",
     totalQuestions: 25,
     duration: 30,
     startTime: "",
@@ -112,6 +119,13 @@ const AdminLiveTest = () => {
       testName: "",
       examName: "",
       testId: "",
+      questionSource: "existing",
+      questionsJson: "",
+      geminiTopic: "",
+      geminiDifficulty: "Medium",
+      ncertClass: "",
+      ncertSubject: "",
+      ncertLessonNo: "",
       totalQuestions: 25,
       duration: 30,
       startTime: "",
@@ -245,15 +259,37 @@ const AdminLiveTest = () => {
     }
 
     // ===================================================
-    // Existing Test ID REQUIRED
+    // QUESTION SOURCE
+    // Existing Test / Questions Zone(JSON) / Gemini / NCERT
     // ===================================================
 
-    if (
-      !form.testId.trim()
-    ) {
-      alert(
-        "Existing Test ID डालें।\n\nLive Test के Questions इसी Test से आएंगे।"
-      );
+    let importedQuestions = [];
+
+    if (form.questionSource === "json") {
+      if (!String(form.questionsJson || "").trim()) {
+        alert("Questions Zone में JSON Questions डालें।");
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(form.questionsJson);
+        importedQuestions = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray(parsed?.questions)
+          ? parsed.questions
+          : [];
+
+        if (!importedQuestions.length) {
+          throw new Error("Questions array खाली है।");
+        }
+      } catch (error) {
+        alert("❌ Questions JSON गलत है:\n" + error.message);
+        return;
+      }
+    }
+
+    if (form.questionSource === "existing" && !form.testId.trim()) {
+      alert("Existing Test ID डालें।");
       return;
     }
 
@@ -290,34 +326,30 @@ const AdminLiveTest = () => {
       setSaving(true);
 
       // =================================================
-      // Existing Test verify
+      // Existing Test verify / Questions Zone count
       // =================================================
 
-      const existingTestRef =
-        ref(
+      let existingTest = {};
+      let questionCount = importedQuestions.length;
+
+      if (form.questionSource === "existing") {
+        const existingTestRef = ref(
           db,
           `tests/${form.testId.trim()}`
         );
 
-      const existingSnapshot =
-        await get(
-          existingTestRef
-        );
+        const existingSnapshot = await get(existingTestRef);
 
-      if (
-        !existingSnapshot.exists()
-      ) {
-        alert(
-          "❌ Existing Test ID Firebase में नहीं मिला।"
-        );
+        if (!existingSnapshot.exists()) {
+          alert("❌ Existing Test ID Firebase में नहीं मिला।");
+          return;
+        }
 
-        return;
+        existingTest = existingSnapshot.val() || {};
       }
 
-      const existingTest =
-        existingSnapshot.val();
-
-      let questionCount = 0;
+      if (form.questionSource === "existing") {
+        questionCount = 0;
 
       if (
         Array.isArray(
@@ -348,9 +380,12 @@ const AdminLiveTest = () => {
             0
           );
       }
+      }
 
       if (
-        questionCount === 0
+        questionCount === 0 &&
+        form.questionSource !== "gemini" &&
+        form.questionSource !== "ncert"
       ) {
 
         alert(
@@ -384,6 +419,29 @@ const AdminLiveTest = () => {
 
             testId:
               form.testId.trim(),
+
+            questionSource:
+              form.questionSource,
+
+            questions:
+              form.questionSource === "json"
+                ? importedQuestions.slice(0, 150)
+                : null,
+
+            geminiTopic:
+              form.geminiTopic.trim(),
+
+            geminiDifficulty:
+              form.geminiDifficulty,
+
+            ncertClass:
+              form.ncertClass.trim(),
+
+            ncertSubject:
+              form.ncertSubject.trim(),
+
+            ncertLessonNo:
+              form.ncertLessonNo.trim(),
 
             totalQuestions:
               Number(
@@ -446,6 +504,29 @@ const AdminLiveTest = () => {
             // Existing Test का Firebase ID
             testId:
               form.testId.trim(),
+
+            questionSource:
+              form.questionSource,
+
+            questions:
+              form.questionSource === "json"
+                ? importedQuestions.slice(0, 150)
+                : null,
+
+            geminiTopic:
+              form.geminiTopic.trim(),
+
+            geminiDifficulty:
+              form.geminiDifficulty,
+
+            ncertClass:
+              form.ncertClass.trim(),
+
+            ncertSubject:
+              form.ncertSubject.trim(),
+
+            ncertLessonNo:
+              form.ncertLessonNo.trim(),
 
             totalQuestions:
               Number(
@@ -536,6 +617,35 @@ const AdminLiveTest = () => {
 
       testId:
         test.testId ||
+        "",
+
+      questionSource:
+        test.questionSource ||
+        "existing",
+
+      questionsJson:
+        test.questions
+          ? JSON.stringify(test.questions, null, 2)
+          : "",
+
+      geminiTopic:
+        test.geminiTopic ||
+        "",
+
+      geminiDifficulty:
+        test.geminiDifficulty ||
+        "Medium",
+
+      ncertClass:
+        test.ncertClass ||
+        "",
+
+      ncertSubject:
+        test.ncertSubject ||
+        "",
+
+      ncertLessonNo:
+        test.ncertLessonNo ||
         "",
 
       totalQuestions:
@@ -1039,6 +1149,74 @@ const AdminLiveTest = () => {
               Live Test में खुलेंगे।
             </small>
 
+          </div>
+
+          {/* QUESTION SOURCE */}
+
+          <div
+            className="admin-field"
+            style={{ gridColumn: "1 / -1" }}
+          >
+            <label>Question Source *</label>
+            <select
+              name="questionSource"
+              value={form.questionSource}
+              onChange={handleChange}
+            >
+              <option value="existing">📚 Questions Zone / Existing Test</option>
+              <option value="json">🧩 Questions Zone JSON</option>
+              <option value="gemini">🤖 Gemini AI Questions</option>
+              <option value="ncert">📖 NCERT</option>
+            </select>
+
+            {form.questionSource === "existing" && (
+              <small>Existing Test ID से questions आएँगे।</small>
+            )}
+
+            {form.questionSource === "json" && (
+              <textarea
+                name="questionsJson"
+                value={form.questionsJson}
+                onChange={handleChange}
+                rows={8}
+                placeholder='[{"question":"...","options":["A","B","C","D"],"answer":0,"explanation":"..."}]'
+                style={{ width: "100%", marginTop: 8, fontFamily: "monospace" }}
+              />
+            )}
+
+            {form.questionSource === "gemini" && (
+              <div className="admin-form-grid" style={{ marginTop: 10 }}>
+                <div className="admin-field">
+                  <label>Gemini Topic</label>
+                  <input name="geminiTopic" value={form.geminiTopic} onChange={handleChange} placeholder="जैसे UPPCS Polity" />
+                </div>
+                <div className="admin-field">
+                  <label>Difficulty</label>
+                  <select name="geminiDifficulty" value={form.geminiDifficulty} onChange={handleChange}>
+                    <option>Easy</option>
+                    <option>Medium</option>
+                    <option>Hard</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {form.questionSource === "ncert" && (
+              <div className="admin-form-grid" style={{ marginTop: 10 }}>
+                <div className="admin-field">
+                  <label>Class</label>
+                  <input name="ncertClass" value={form.ncertClass} onChange={handleChange} placeholder="Class 6" />
+                </div>
+                <div className="admin-field">
+                  <label>Subject</label>
+                  <input name="ncertSubject" value={form.ncertSubject} onChange={handleChange} placeholder="History" />
+                </div>
+                <div className="admin-field">
+                  <label>Lesson No.</label>
+                  <input name="ncertLessonNo" value={form.ncertLessonNo} onChange={handleChange} placeholder="1" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ICON */}
