@@ -52,8 +52,8 @@ const normalizeQuestions = (value) => {
         ? q.explanation.join("\n")
         : String(q?.explanation || q?.solution || ""),
       explanationPoints: Array.isArray(q?.explanationPoints)
-        ? q.explanationPoints
-        : undefined,
+  ? q.explanationPoints
+  : [],
     };
   });
 };
