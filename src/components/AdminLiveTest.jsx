@@ -75,6 +75,19 @@ export default function AdminLiveTest() {
       setTests(list);
     });
   }, []);
+  useEffect(() => {
+  return onValue(ref(db, "tests"), (snapshot) => {
+    const data = snapshot.val() || {};
+
+    const list = Object.entries(data).map(([id, value]) => ({
+      id,
+      ...value,
+      questions: normalizeQuestions(value?.questions),
+    }));
+
+    setQuestionZoneTests(list);
+  });
+}, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -349,25 +362,78 @@ export default function AdminLiveTest() {
             <input name="examName" value={form.examName} onChange={handleChange} placeholder="जैसे UPPCS 2026" />
           </div>
 
-          <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
-            <label>📝 Question Source *</label>
-            <select name="questionSource" value={form.questionSource} onChange={handleChange}>
-              <option value="existing">📚 Questions Zone / Existing Test</option>
-              <option value="json">🧩 Questions JSON</option>
-              <option value="gemini">🤖 Gemini AI</option>
-              <option value="ncert">📖 NCERT + Gemini</option>
-            </select>
-          </div>
+          {/* Questions From */}
+<div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+  <label>🧩 Questions From *</label>
 
-          {form.questionSource === "existing" && (
-            <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
-              <label>Existing Test ID *</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input name="testId" value={form.testId} onChange={handleChange} placeholder="Firebase tests/ के अंदर वाला Test ID" />
-                <button type="button" onClick={checkExistingTest} disabled={checkingTest}>{checkingTest ? "Checking..." : "🔎 Check"}</button>
-              </div>
-              <small>Questions Zone में बने Test का ID यहाँ डालें।</small>
-            </div>
+  <select
+    name="questionSource"
+    value={form.questionSource}
+    onChange={handleChange}
+  >
+    <option value="existing">
+      📚 Questions Zone / Existing Test
+    </option>
+
+    <option value="json">
+      🧩 Questions JSON
+    </option>
+
+    <option value="gemini">
+      🤖 Gemini AI
+    </option>
+
+    <option value="ncert">
+      📖 NCERT + Gemini
+    </option>
+  </select>
+</div>
+
+{/* Questions Zone Test Selection */}
+{form.questionSource === "existing" && (
+  <div
+    className="admin-field"
+    style={{ gridColumn: "1 / -1" }}
+  >
+    <label>📚 Questions Zone से Test चुनें *</label>
+
+    <select
+      name="testId"
+      value={form.testId}
+      onChange={handleChange}
+    >
+      <option value="">
+        -- Questions Zone का Test चुनें --
+      </option>
+
+      {questionZoneTests.map((test) => {
+        const qCount = normalizeQuestions(test.questions).length;
+
+        return (
+          <option key={test.id} value={test.id}>
+            {test.testName ||
+              test.name ||
+              test.examName ||
+              "Untitled Test"}{" "}
+            — {qCount} Questions
+          </option>
+        );
+      })}
+    </select>
+
+    {form.testId && (
+      <small style={{ display: "block", marginTop: 8 }}>
+        ✅ Selected Test ID: {form.testId}
+      </small>
+    )}
+
+    {!questionZoneTests.length && (
+      <small style={{ display: "block", marginTop: 8 }}>
+        ⚠️ Questions Zone में कोई Test उपलब्ध नहीं है।
+      </small>
+    )}
+  </div>
+)}
           )}
 
           {form.questionSource === "json" && (
