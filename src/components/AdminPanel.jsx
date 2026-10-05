@@ -83,9 +83,14 @@ function createQuestion(id = 1) {
    NORMALIZE ANSWER
 ========================================================= */
 
-function normalizeAnswer(q) {
+function normalizeAnswer(q, preferZeroBased = false) {
   /*
-    answerIndex हमेशा 0-3 माना जाएगा।
+    Internal answer format हमेशा 0-3 रहेगा:
+    A=0, B=1, C=2, D=3.
+
+    यदि पूरे imported JSON में कोई answer=0/answerIndex=0 मिलता है,
+    तो numeric answers 0-3 को 0-based माना जाएगा।
+    इससे पुराने 1-4 वाले JSON भी टूटेंगे नहीं।
   */
 
   if (
@@ -93,12 +98,7 @@ function normalizeAnswer(q) {
     q?.answerIndex !== null
   ) {
     const value = Number(q.answerIndex);
-
-    if (
-      Number.isInteger(value) &&
-      value >= 0 &&
-      value <= 3
-    ) {
+    if (Number.isInteger(value) && value >= 0 && value <= 3) {
       return value;
     }
   }
@@ -109,8 +109,6 @@ function normalizeAnswer(q) {
     q?.correct ??
     0;
 
-  // आपका JSON format 0-based है:
-  // A = 0, B = 1, C = 2, D = 3
   if (typeof answer === "string") {
     const value = answer.trim().toUpperCase();
 
@@ -119,27 +117,28 @@ function normalizeAnswer(q) {
     if (value === "C") return 2;
     if (value === "D") return 3;
 
-    if (!/^\d+$/.test(value)) return 0;
-    answer = Number(value);
+    if (/^\d+$/.test(value)) {
+      answer = Number(value);
+    } else {
+      return 0;
+    }
   }
 
   answer = Number(answer);
 
-  // Default JSON format: 0-3
-  if (
-    Number.isInteger(answer) &&
-    answer >= 0 &&
-    answer <= 3
-  ) {
-    return answer;
-  }
-
-  // पुराने/विशेष JSON के लिए oneBased flag support
-  // { "answer": 1, "answerFormat": "oneBased" } => A
-  if (q?.answerFormat === "oneBased" &&
-      Number.isInteger(answer) &&
-      answer >= 1 && answer <= 4) {
-    return answer - 1;
+  if (preferZeroBased) {
+    if (Number.isInteger(answer) && answer >= 0 && answer <= 3) {
+      return answer;
+    }
+    if (answer === 4) return 3;
+  } else {
+    /* पुराने JSON: 1=A, 2=B, 3=C, 4=D */
+    if (Number.isInteger(answer) && answer >= 1 && answer <= 4) {
+      return answer - 1;
+    }
+    if (Number.isInteger(answer) && answer >= 0 && answer <= 3) {
+      return answer;
+    }
   }
 
   return 0;
@@ -160,8 +159,23 @@ function normalizeImportedQuestions(data) {
     source = data.data;
   }
 
+  /*
+    हमारे current JSON format में answer 0-based है:
+    A=0, B=1, C=2, D=3.
+    यदि किसी question में answer=0/answerIndex=0 है तो पूरे file को
+    0-based मानते हैं। इससे 1-4 वाले पुराने JSON का support भी बना रहता है।
+  */
+  const preferZeroBased = source.some((q) => {
+    const value = q?.answerIndex ?? q?.answer;
+    if (typeof value === "string") {
+      const v = value.trim().toUpperCase();
+      return v === "A" || v === "B" || v === "C" || v === "D" || v === "0";
+    }
+    return Number(value) === 0;
+  });
+
   return source.map((q, index) => {
-    const options = Array.isArray(q?.options)
+    const rawOptions = Array.isArray(q?.options)
       ? q.options
       : [
           q?.optionA ?? q?.A ?? "",
@@ -169,6 +183,20 @@ function normalizeImportedQuestions(data) {
           q?.optionC ?? q?.C ?? "",
           q?.optionD ?? q?.D ?? "",
         ];
+
+    /* AdminPanel में A-D के 4 fields हैं। यदि JSON में 5वाँ
+       'उपर्युक्त में से कोई नहीं' दिया है तो उसे Review/Form में नहीं भेजें। */
+    const options = [
+      rawOptions[0] ?? "",
+      rawOptions[1] ?? "",
+      rawOptions[2] ?? "",
+      rawOptions[3] ?? "",
+    ];
+
+    const rawExplanation =
+      q?.explanation ??
+      q?.solution ??
+      "";
 
     return {
       id: q?.id ?? index + 1,
@@ -179,23 +207,14 @@ function normalizeImportedQuestions(data) {
         q?.text ??
         "",
 
-      options: [
-        options[0] ?? "",
-        options[1] ?? "",
-        options[2] ?? "",
-        options[3] ?? "",
-      ],
+      options,
 
-      answer: normalizeAnswer(q),
+      answer: normalizeAnswer(q, preferZeroBased),
 
-      explanation:
-        Array.isArray(q?.explanation)
-          ? q.explanation.join("\n")
-          : (
-              q?.explanation ??
-              q?.solution ??
-              ""
-            ),
+      /* 5-point explanation array को textarea के लिए string बनाएं */
+      explanation: Array.isArray(rawExplanation)
+        ? rawExplanation.filter(Boolean).join("\n")
+        : String(rawExplanation ?? ""),
 
       explanationImage:
         q?.explanationImage ??
@@ -714,9 +733,7 @@ export default function AdminPanel({
               normalizeAnswer(q),
 
             explanation:
-              Array.isArray(q?.explanation)
-                ? q.explanation.join("\n")
-                : (q?.explanation || ""),
+              q?.explanation || "",
 
             explanationImage:
               q?.explanationImage ||
