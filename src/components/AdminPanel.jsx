@@ -109,6 +109,8 @@ function normalizeAnswer(q) {
     q?.correct ??
     0;
 
+  // आपका JSON format 0-based है:
+  // A = 0, B = 1, C = 2, D = 3
   if (typeof answer === "string") {
     const value = answer.trim().toUpperCase();
 
@@ -117,34 +119,27 @@ function normalizeAnswer(q) {
     if (value === "C") return 2;
     if (value === "D") return 3;
 
-    if (/^\d+$/.test(value)) {
-      answer = Number(value);
-    } else {
-      return 0;
-    }
+    if (!/^\d+$/.test(value)) return 0;
+    answer = Number(value);
   }
 
   answer = Number(answer);
 
-  /*
-    अगर JSON में 1-4 दिया गया है:
-    1=A, 2=B, 3=C, 4=D
-  */
-
-  if (
-    Number.isInteger(answer) &&
-    answer >= 1 &&
-    answer <= 4
-  ) {
-    return answer - 1;
-  }
-
+  // Default JSON format: 0-3
   if (
     Number.isInteger(answer) &&
     answer >= 0 &&
     answer <= 3
   ) {
     return answer;
+  }
+
+  // पुराने/विशेष JSON के लिए oneBased flag support
+  // { "answer": 1, "answerFormat": "oneBased" } => A
+  if (q?.answerFormat === "oneBased" &&
+      Number.isInteger(answer) &&
+      answer >= 1 && answer <= 4) {
+    return answer - 1;
   }
 
   return 0;
@@ -194,9 +189,13 @@ function normalizeImportedQuestions(data) {
       answer: normalizeAnswer(q),
 
       explanation:
-        q?.explanation ??
-        q?.solution ??
-        "",
+        Array.isArray(q?.explanation)
+          ? q.explanation.join("\n")
+          : (
+              q?.explanation ??
+              q?.solution ??
+              ""
+            ),
 
       explanationImage:
         q?.explanationImage ??
@@ -715,7 +714,9 @@ export default function AdminPanel({
               normalizeAnswer(q),
 
             explanation:
-              q?.explanation || "",
+              Array.isArray(q?.explanation)
+                ? q.explanation.join("\n")
+                : (q?.explanation || ""),
 
             explanationImage:
               q?.explanationImage ||
