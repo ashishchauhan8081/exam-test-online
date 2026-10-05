@@ -65,6 +65,7 @@ export default function AdminLiveTest() {
   const [generating, setGenerating] = useState(false);
   const [checkingTest, setCheckingTest] = useState(false);
   const [uploadingJson, setUploadingJson] = useState(false);
+  const [questionZoneTests, setQuestionZoneTests] = useState([]);
 
   useEffect(() => {
     return onValue(ref(db, "liveTests"), (snapshot) => {
