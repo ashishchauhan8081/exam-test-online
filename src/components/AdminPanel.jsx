@@ -243,6 +243,17 @@ export default function AdminPanel({
   const [selectedExam, setSelectedExam] =
     useState("uppcs");
 
+  /* =======================================================
+     EXAM MANAGEMENT
+  ======================================================= */
+
+  const [examList, setExamList] = useState(exams);
+  const [examName, setExamName] = useState("");
+  const [examIcon, setExamIcon] = useState("📚");
+  const [examFreeTests, setExamFreeTests] = useState(1);
+  const [examPaidPrice, setExamPaidPrice] = useState(19);
+  const [editingExamId, setEditingExamId] = useState(null);
+
   const [testNumber, setTestNumber] =
     useState(1);
 
@@ -339,6 +350,38 @@ export default function AdminPanel({
           "Tests load error:",
           error
         );
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  /* =======================================================
+     LOAD EXAMS / EXAM PRICING SETTINGS
+  ======================================================= */
+
+  useEffect(() => {
+    const examRef = ref(db, "examSettings");
+
+    const unsubscribe = onValue(
+      examRef,
+      (snapshot) => {
+        const value = snapshot.val();
+        const stored = Array.isArray(value?.exams)
+          ? value.exams
+          : Array.isArray(value)
+            ? value
+            : null;
+
+        if (stored && stored.length) {
+          setExamList(stored);
+        } else {
+          setExamList(exams);
+        }
+      },
+      (error) => {
+        console.error("Exam settings load error:", error);
+        setExamList(exams);
       }
     );
 
@@ -606,12 +649,12 @@ export default function AdminPanel({
   ======================================================= */
 
   const getExamName = (id) =>
-    exams.find(
+    examList.find(
       (exam) => exam.id === id
     )?.name || id;
 
   const getExamIcon = (id) =>
-    exams.find(
+    examList.find(
       (exam) => exam.id === id
     )?.icon || "📚";
 
@@ -619,6 +662,132 @@ export default function AdminPanel({
     `${selectedExam}_test_${Number(
       testNumber
     )}`;
+
+  const getExamPricing = (examId = selectedExam, number = testNumber) => {
+    const exam = examList.find((item) => item.id === examId);
+    const freeTests = Number(exam?.freeTests ?? exam?.paidAfter ?? 1);
+    const paidPrice = Number(exam?.paidPrice ?? 0);
+    return {
+      freeTests,
+      paidPrice,
+      price: Number(number) <= freeTests ? 0 : paidPrice,
+    };
+  };
+
+  /* =======================================================
+     EXAM MANAGEMENT HELPERS
+  ======================================================= */
+
+  const resetExamForm = () => {
+    setEditingExamId(null);
+    setExamName("");
+    setExamIcon("📚");
+    setExamFreeTests(1);
+    setExamPaidPrice(19);
+  };
+
+  const saveExam = async () => {
+    const name = examName.trim();
+    if (!name) {
+      alert("Exam Name डालें।");
+      return;
+    }
+
+    const freeTests = Math.max(0, Number(examFreeTests) || 0);
+    const paidPrice = Math.max(0, Number(examPaidPrice) || 0);
+
+    const id = editingExamId || name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || `exam-${Date.now()}`;
+
+    if (!editingExamId && examList.some((exam) => exam.id === id)) {
+      alert("यह Exam पहले से मौजूद है। अलग Exam Name रखें।");
+      return;
+    }
+
+    const examData = {
+      id,
+      name,
+      icon: examIcon || "📚",
+      freeTests,
+      paidAfter: freeTests,
+      paidPrice,
+      updatedAt: Date.now(),
+    };
+
+    const next = editingExamId
+      ? examList.map((exam) =>
+          exam.id === editingExamId ? { ...exam, ...examData, id: editingExamId } : exam
+        )
+      : [...examList, examData];
+
+    try {
+      setSaving(true);
+      await set(ref(db, "examSettings"), {
+        exams: next,
+        updatedAt: Date.now(),
+        updatedBy: currentUser?.email || ADMIN_EMAIL,
+      });
+
+      setExamList(next);
+      setSelectedExam(editingExamId || id);
+      setMessage(`✅ ${name} Exam successfully save हो गया।`);
+      resetExamForm();
+    } catch (error) {
+      console.error("Save exam error:", error);
+      alert(`❌ Exam Save नहीं हुआ:\n${error?.message || "Unknown error"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editExam = (exam) => {
+    setEditingExamId(exam.id);
+    setExamName(exam.name || "");
+    setExamIcon(exam.icon || "📚");
+    setExamFreeTests(Number(exam.freeTests ?? exam.paidAfter ?? 1));
+    setExamPaidPrice(Number(exam.paidPrice ?? 19));
+    setActiveSection("exams");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const deleteExam = async (exam) => {
+    const used = testEntries.some(([, test]) => test?.exam === exam.id);
+    const warning = used
+      ? `\n\n⚠️ इस Exam के ${testEntries.filter(([, test]) => test?.exam === exam.id).length} Test मौजूद हैं।`
+      : "";
+
+    if (!window.confirm(`\"${exam.name}\" Exam delete करना चाहते हैं?${warning}`)) return;
+
+    const next = examList.filter((item) => item.id !== exam.id);
+    if (!next.length) {
+      alert("कम से कम 1 Exam रखना जरूरी है।");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await set(ref(db, "examSettings"), {
+        exams: next,
+        updatedAt: Date.now(),
+        updatedBy: currentUser?.email || ADMIN_EMAIL,
+      });
+      setExamList(next);
+      if (selectedExam === exam.id) setSelectedExam(next[0].id);
+      setMessage(`🗑️ ${exam.name} Exam delete हो गया।`);
+    } catch (error) {
+      alert(`❌ Exam Delete Error:\n${error?.message || "Unknown error"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openNewExam = () => {
+    resetExamForm();
+    setActiveSection("exams");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   /* =======================================================
      RESET FORM
@@ -1343,7 +1512,12 @@ Cancel = पुराने Questions के साथ JSON Questions जोड�
         Number(testDuration),
 
       price:
-        Number(testPrice),
+        getExamPricing(selectedExam, testNumber).price,
+
+      pricing: {
+        freeTests: getExamPricing(selectedExam, testNumber).freeTests,
+        paidPrice: getExamPricing(selectedExam, testNumber).paidPrice,
+      },
 
       questions:
         questions.map(
@@ -1706,6 +1880,19 @@ ${error?.message || "Unknown error"}`
 
         <button
           className={
+            activeSection === "exams"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setActiveSection("exams")
+          }
+        >
+          🏛️ Exams
+        </button>
+
+        <button
+          className={
             activeSection === "resources"
               ? "active"
               : ""
@@ -1833,6 +2020,22 @@ ${error?.message || "Unknown error"}`
                     />
                   </label>
 
+                  <button
+                    type="button"
+                    className="admin-btn primary"
+                    onClick={openNewExam}
+                  >
+                    ➕ New Exam
+                  </button>
+
+                  <button
+                    type="button"
+                    className="admin-btn secondary"
+                    onClick={() => setActiveSection("exams")}
+                  >
+                    ⚙️ Edit Exams
+                  </button>
+
                 </div>
 
               </div>
@@ -1859,7 +2062,7 @@ ${error?.message || "Unknown error"}`
                       )
                     }
                   >
-                    {exams.map(
+                    {examList.map(
                       (exam) => (
                         <option
                           key={
@@ -1983,26 +2186,22 @@ ${error?.message || "Unknown error"}`
                 <div className="form-group">
 
                   <label>
-                    Price (₹)
+                    Price (₹) — Auto
                   </label>
 
                   <input
                     type="number"
                     min="0"
                     value={
-                      testPrice
+                      getExamPricing(selectedExam, testNumber).price
                     }
-                    onChange={(e) =>
-                      setTestPrice(
-                        Number(
-                          e.target.value
-                        )
-                      )
-                    }
+                    readOnly
                   />
 
                   <small>
-                    Free Test के लिए ₹0 रखें।
+                    {Number(testNumber) <= getExamPricing(selectedExam, testNumber).freeTests
+                      ? `🆓 Test ${testNumber} Free है।`
+                      : `💎 Test ${testNumber} Paid है — ₹${getExamPricing(selectedExam, testNumber).paidPrice}`}
                   </small>
 
                 </div>
@@ -2394,6 +2593,148 @@ ${error?.message || "Unknown error"}`
             </div>
 
           </>
+        )}
+
+        {/* =================================================
+            EXAM MANAGEMENT
+        ================================================= */}
+
+        {activeSection === "exams" && (
+          <div className="admin-card">
+            <div className="card-title">
+              <div>
+                <h2>🏛️ Exam Management</h2>
+                <p>नया Exam जोड़ें और हर Exam की Free/Paid Test setting edit करें।</p>
+              </div>
+
+              <button
+                type="button"
+                className="admin-btn secondary"
+                onClick={resetExamForm}
+              >
+                🔄 New Exam Form
+              </button>
+            </div>
+
+            <div className="form-grid" style={{ marginBottom: 20 }}>
+              <div className="form-group">
+                <label>Exam Name *</label>
+                <input
+                  type="text"
+                  value={examName}
+                  onChange={(e) => setExamName(e.target.value)}
+                  placeholder="जैसे UP Police"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Exam Icon</label>
+                <input
+                  type="text"
+                  value={examIcon}
+                  onChange={(e) => setExamIcon(e.target.value)}
+                  placeholder="👮"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Free Tests *</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={examFreeTests}
+                  onChange={(e) => setExamFreeTests(Number(e.target.value))}
+                />
+                <small>इतने Test तक Student को Free access मिलेगा।</small>
+              </div>
+
+              <div className="form-group">
+                <label>इसके बाद Paid Test Price (₹) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={examPaidPrice}
+                  onChange={(e) => setExamPaidPrice(Number(e.target.value))}
+                />
+                <small>Free Tests के बाद आने वाले Tests की default कीमत।</small>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 25 }}>
+              <button
+                type="button"
+                className="admin-btn primary"
+                onClick={saveExam}
+                disabled={saving}
+              >
+                {saving ? "⏳ Saving..." : editingExamId ? "💾 Update Exam" : "➕ Add Exam"}
+              </button>
+
+              {editingExamId && (
+                <button
+                  type="button"
+                  className="admin-btn secondary"
+                  onClick={resetExamForm}
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+
+            <h3 style={{ marginBottom: 12 }}>📋 सभी Exams</h3>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              {examList.map((exam) => {
+                const examTests = testEntries.filter(([, test]) => test?.exam === exam.id);
+                const freeTests = Number(exam.freeTests ?? exam.paidAfter ?? 1);
+                const paidPrice = Number(exam.paidPrice ?? 0);
+
+                return (
+                  <div
+                    key={exam.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 14,
+                      padding: 15,
+                      background: "#fff",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 15,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 17 }}>{exam.icon || "📚"} {exam.name}</strong>
+                      <div style={{ marginTop: 5, color: "#475569" }}>
+                        🆔 {exam.id} • 📚 {examTests.length} Tests
+                      </div>
+                      <div style={{ marginTop: 5, color: "#166534", fontWeight: 600 }}>
+                        🆓 पहले {freeTests} Test Free • 💎 उसके बाद ₹{paidPrice}/Test
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="admin-btn edit"
+                        onClick={() => editExam(exam)}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-btn danger"
+                        onClick={() => deleteExam(exam)}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* =================================================
