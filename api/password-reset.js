@@ -1,268 +1,253 @@
 // ============================================================
 // Exam Test
-// API: Password Reset by Mobile Number + OTP
-// File: /api/password-reset.js
+// Password Reset API
+// User -> Admin Request -> Admin generates OTP -> Admin sends
+// WhatsApp manually -> User verifies OTP + sets new password
 // ============================================================
 
 import admin from "firebase-admin";
-
-// ------------------------------------------------------------
-// Firebase Admin Initialization
-// ------------------------------------------------------------
+import crypto from "crypto";
 
 function getFirebaseAdmin() {
-  try {
-    if (admin.apps.length > 0) {
-      return admin;
-    }
+  if (admin.apps.length > 0) return admin;
 
-    let serviceAccount;
-
-    // Firebase service account JSON
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-      serviceAccount = JSON.parse(
-        process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-      );
-    }
-
-    if (!serviceAccount) {
-      throw new Error(
-        "FIREBASE_SERVICE_ACCOUNT_JSON is not configured"
-      );
-    }
-
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      databaseURL:
-        process.env.FIREBASE_DATABASE_URL ||
-        `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`,
-    });
-
-    return admin;
-  } catch (error) {
-    console.error("Firebase Admin Init Error:", error);
-    throw error;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not configured");
   }
-}
 
-// ------------------------------------------------------------
-// JSON Response Helper
-// ------------------------------------------------------------
+  const serviceAccount = JSON.parse(raw);
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL:
+      process.env.FIREBASE_DATABASE_URL ||
+      "https://study-with-power-f6914-default-rtdb.asia-southeast1.firebasedatabase.app",
+  });
+
+  return admin;
+}
 
 function sendJSON(res, status, data) {
   res.status(status);
   res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(data));
+  return res.end(JSON.stringify(data));
 }
 
-// ------------------------------------------------------------
-// Mobile Number Normalizer
-// ------------------------------------------------------------
+function normalizeMobile(value) {
+  let number = String(value || "").replace(/\D/g, "");
 
-function normalizeMobile(mobile) {
-  if (!mobile) return "";
-
-  let number = String(mobile).replace(/\D/g, "");
-
-  // India
-  if (number.length === 10) {
-    number = "91" + number;
+  if (number.startsWith("91") && number.length === 12) {
+    number = number.slice(2);
   }
 
-  // If user entered 0XXXXXXXXXX
   if (number.length === 11 && number.startsWith("0")) {
-    number = "91" + number.substring(1);
+    number = number.slice(1);
   }
 
-  return number;
+  return number.slice(-10);
 }
 
-// ------------------------------------------------------------
-// Generate 6 Digit OTP
-// ------------------------------------------------------------
+function normalizeWhatsAppMobile(value) {
+  const mobile = normalizeMobile(value);
+  return mobile ? `91${mobile}` : "";
+}
 
 function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
-// ------------------------------------------------------------
-// Hash OTP
-// ------------------------------------------------------------
-
-async function hashOTP(otp) {
-  const crypto = await import("crypto");
-
+function hashOTP(otp) {
   return crypto
     .createHash("sha256")
     .update(String(otp))
     .digest("hex");
 }
 
-// ------------------------------------------------------------
-// Send WhatsApp Message
-// ------------------------------------------------------------
+async function getBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
 
-async function sendWhatsAppOTP(mobile, otp) {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneNumberId) {
-    throw new Error(
-      "WhatsApp API environment variables are missing"
-    );
+  if (typeof req.body === "string" && req.body.trim()) {
+    return JSON.parse(req.body);
   }
 
-  const url =
-    `https://graph.facebook.com/v22.0/` +
-    `${phoneNumberId}/messages`;
-
-  const message =
-    `Exam Test Password Reset\n\n` +
-    `Aapka OTP hai: ${otp}\n\n` +
-    `Ye OTP 10 minutes ke liye valid hai.\n` +
-    `Agar aapne password reset request nahi ki hai, ` +
-    `to is message ko ignore karein.`;
-
-  const response = await fetch(url, {
-    method: "POST",
-
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-
-      to: mobile,
-
-      type: "text",
-
-      text: {
-        preview_url: false,
-        body: message,
-      },
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error("WhatsApp API Error:", data);
-
-    throw new Error(
-      data?.error?.message ||
-        "WhatsApp message send failed"
-    );
-  }
-
-  return data;
+  return {};
 }
 
 // ------------------------------------------------------------
-// Find Firebase User By Mobile Number
+// ADMIN AUTH
+// ------------------------------------------------------------
+
+async function requireAdmin(firebaseAdmin, req) {
+  const authHeader = String(
+    req.headers?.authorization || ""
+  );
+
+  if (!authHeader.startsWith("Bearer ")) {
+    throw Object.assign(new Error("Admin authentication required."), {
+      statusCode: 401,
+    });
+  }
+
+  const token = authHeader.substring(7).trim();
+
+  if (!token) {
+    throw Object.assign(new Error("Admin authentication required."), {
+      statusCode: 401,
+    });
+  }
+
+  const decoded = await firebaseAdmin
+    .auth()
+    .verifyIdToken(token);
+
+  const adminEmail = String(
+    process.env.ADMIN_EMAIL || "cciashish@gmail.com"
+  ).toLowerCase();
+
+  if (
+    String(decoded.email || "").toLowerCase() !==
+    adminEmail
+  ) {
+    throw Object.assign(new Error("Admin access denied."), {
+      statusCode: 403,
+    });
+  }
+
+  return decoded;
+}
+
+// ------------------------------------------------------------
+// USER LOOKUP
 // ------------------------------------------------------------
 
 async function findUserByMobile(firebaseAdmin, mobile) {
+  const db = firebaseAdmin.database();
+
+  const snapshot = await db
+    .ref(`mobileUsers/${mobile}`)
+    .get();
+
+  if (!snapshot.exists()) return null;
+
+  const data = snapshot.val();
+
+  if (!data?.uid) return null;
+
   try {
-    const auth = firebaseAdmin.auth();
-
-    // Firebase Auth phone number format
-    const phoneNumber = "+" + mobile;
-
-    const userRecord = await auth.getUserByPhoneNumber(
-      phoneNumber
-    );
-
-    return userRecord;
-  } catch (error) {
-    console.error(
-      "Firebase User Search Error:",
-      error.code,
-      error.message
-    );
-
+    return await firebaseAdmin.auth().getUser(data.uid);
+  } catch {
     return null;
   }
 }
 
+async function getRequestByMobile(db, mobile) {
+  const snapshot = await db
+    .ref("passwordResetRequests")
+    .orderByChild("mobile")
+    .equalTo(mobile)
+    .get();
+
+  if (!snapshot.exists()) return null;
+
+  const values = snapshot.val() || {};
+
+  const items = Object.entries(values)
+    .map(([id, data]) => ({ id, ...(data || {}) }))
+    .sort(
+      (a, b) =>
+        Number(b.createdAt || 0) -
+        Number(a.createdAt || 0)
+    );
+
+  return items[0] || null;
+}
+
 // ------------------------------------------------------------
-// MAIN API
+// MAIN HANDLER
 // ------------------------------------------------------------
 
 export default async function handler(req, res) {
-  // Always return JSON
   res.setHeader("Content-Type", "application/json");
 
-  // ----------------------------------------------------------
-  // OPTIONS
-  // ----------------------------------------------------------
-
   if (req.method === "OPTIONS") {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      "*"
-    );
-
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader(
       "Access-Control-Allow-Methods",
-      "POST, OPTIONS"
+      "GET, POST, OPTIONS"
     );
-
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type"
+      "Content-Type, Authorization"
     );
-
     return res.status(200).end();
-  }
-
-  // ----------------------------------------------------------
-  // Only POST
-  // ----------------------------------------------------------
-
-  if (req.method !== "POST") {
-    return sendJSON(res, 405, {
-      success: false,
-      message: "Only POST method is allowed",
-    });
   }
 
   try {
     const firebaseAdmin = getFirebaseAdmin();
-
-    const body =
-      typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body || {};
-
-    const action = body.action;
+    const db = firebaseAdmin.database();
 
     // ========================================================
-    // ACTION 1: SEND OTP
+    // GET: ADMIN LIST
     // ========================================================
 
-    if (action === "send-otp") {
+    if (req.method === "GET") {
+      await requireAdmin(firebaseAdmin, req);
+
+      const snapshot = await db
+        .ref("passwordResetRequests")
+        .get();
+
+      const values = snapshot.exists()
+        ? snapshot.val() || {}
+        : {};
+
+      const requests = Object.entries(values)
+        .map(([id, data]) => ({
+          id,
+          ...(data || {}),
+        }))
+        .filter(
+          (item) =>
+            item.status !== "used" &&
+            item.status !== "cleared"
+        )
+        .sort(
+          (a, b) =>
+            Number(b.createdAt || 0) -
+            Number(a.createdAt || 0)
+        );
+
+      return sendJSON(res, 200, {
+        success: true,
+        requests,
+      });
+    }
+
+    if (req.method !== "POST") {
+      return sendJSON(res, 405, {
+        success: false,
+        message: "Only POST method is allowed.",
+      });
+    }
+
+    const body = await getBody(req);
+    const action = String(body.action || "");
+
+    // ========================================================
+    // ACTION: REQUEST
+    // Public user action. No OTP is generated here.
+    // ========================================================
+
+    if (action === "request") {
       const mobile = normalizeMobile(body.mobile);
 
-      if (!mobile) {
+      if (!/^[6-9]\d{9}$/.test(mobile)) {
         return sendJSON(res, 400, {
           success: false,
-          message: "Mobile number required",
+          message: "कृपया सही 10 अंकों का Mobile Number डालें।",
         });
       }
-
-      if (mobile.length !== 12) {
-        return sendJSON(res, 400, {
-          success: false,
-          message:
-            "Please enter a valid 10 digit mobile number",
-        });
-      }
-
-      // --------------------------------------------
-      // Check user exists in Firebase Auth
-      // --------------------------------------------
 
       const user = await findUserByMobile(
         firebaseAdmin,
@@ -272,262 +257,337 @@ export default async function handler(req, res) {
       if (!user) {
         return sendJSON(res, 404, {
           success: false,
-          message:
-            "Is mobile number se koi account nahi mila.",
+          message: "इस Mobile Number से कोई account नहीं मिला।",
         });
       }
 
-      // --------------------------------------------
-      // Generate OTP
-      // --------------------------------------------
-
-      const otp = generateOTP();
-
-      const otpHash = await hashOTP(otp);
-
-      // --------------------------------------------
-      // Save OTP in Realtime Database
-      // --------------------------------------------
-
-      const db = firebaseAdmin.database();
-
-      const otpRef = db.ref(
-        `passwordResetOtps/${mobile}`
+      const oldRequest = await getRequestByMobile(
+        db,
+        mobile
       );
 
-      await otpRef.set({
-        otpHash: otpHash,
-        uid: user.uid,
-        mobile: mobile,
-        createdAt: Date.now(),
-        expiresAt:
-          Date.now() + 10 * 60 * 1000,
-        attempts: 0,
-      });
+      // If an active request exists, don't create duplicates.
+      if (
+        oldRequest &&
+        ["pending", "otp_generated", "sent"].includes(
+          oldRequest.status
+        )
+      ) {
+        return sendJSON(res, 200, {
+          success: true,
+          requestId: oldRequest.id,
+          message:
+            "Password reset request पहले से Admin Panel में मौजूद है। Admin से OTP प्राप्त करें।",
+        });
+      }
 
-      // --------------------------------------------
-      // Send WhatsApp
-      // --------------------------------------------
+      const requestRef = db
+        .ref("passwordResetRequests")
+        .push();
 
-      await sendWhatsAppOTP(
+      const userSnapshot = await db
+        .ref(`mobileUsers/${mobile}`)
+        .get();
+
+      const userData = userSnapshot.exists()
+        ? userSnapshot.val() || {}
+        : {};
+
+      await requestRef.set({
         mobile,
-        otp
-      );
+        uid: user.uid,
+        name:
+          userData.name ||
+          user.displayName ||
+          "",
+        status: "pending",
+        otp: null,
+        createdAt: Date.now(),
+        generatedAt: null,
+        sentAt: null,
+        usedAt: null,
+      });
 
       return sendJSON(res, 200, {
         success: true,
+        requestId: requestRef.key,
         message:
-          "OTP WhatsApp par bhej diya gaya hai.",
+          "Password reset request Admin Panel में भेज दी गई है।",
       });
     }
 
     // ========================================================
-    // ACTION 2: VERIFY OTP
+    // ALL REMAINING ACTIONS ARE ADMIN ACTIONS
     // ========================================================
 
-    if (action === "verify-otp") {
-      const mobile = normalizeMobile(body.mobile);
-      const otp = String(body.otp || "").trim();
+    await requireAdmin(firebaseAdmin, req);
 
-      if (!mobile || !otp) {
+    // ========================================================
+    // ACTION: GENERATE OTP
+    // ========================================================
+
+    if (action === "generate") {
+      const mobile = normalizeMobile(body.mobile);
+      const requestId = String(body.requestId || "");
+
+      if (!/^[6-9]\d{9}$/.test(mobile)) {
         return sendJSON(res, 400, {
           success: false,
-          message:
-            "Mobile number aur OTP required hai.",
+          message: "Invalid mobile number.",
+        });
+      }
+
+      const user = await findUserByMobile(
+        firebaseAdmin,
+        mobile
+      );
+
+      if (!user) {
+        return sendJSON(res, 404, {
+          success: false,
+          message: "User account नहीं मिला।",
+        });
+      }
+
+      let requestRef;
+      let requestData;
+
+      if (requestId) {
+        requestRef = db.ref(
+          `passwordResetRequests/${requestId}`
+        );
+
+        const snap = await requestRef.get();
+
+        if (snap.exists()) {
+          requestData = snap.val() || {};
+        }
+      }
+
+      if (!requestRef || !requestData) {
+        const existing = await getRequestByMobile(
+          db,
+          mobile
+        );
+
+        if (existing) {
+          requestRef = db.ref(
+            `passwordResetRequests/${existing.id}`
+          );
+          requestData = existing;
+        }
+      }
+
+      if (!requestRef || !requestData) {
+        return sendJSON(res, 404, {
+          success: false,
+          message: "Password reset request नहीं मिली।",
+        });
+      }
+
+      const otp = generateOTP();
+      const otpHash = hashOTP(otp);
+      const now = Date.now();
+      const expiresAt = now + 10 * 60 * 1000;
+
+      await db
+        .ref(`passwordResetOtps/${mobile}`)
+        .set({
+          otpHash,
+          uid: user.uid,
+          mobile,
+          createdAt: now,
+          expiresAt,
+          attempts: 0,
+          verified: false,
+        });
+
+      await requestRef.update({
+        uid: user.uid,
+        mobile,
+        status: "otp_generated",
+        otp,
+        generatedAt: now,
+        expiresAt,
+        sentAt: null,
+        usedAt: null,
+      });
+
+      return sendJSON(res, 200, {
+        success: true,
+        otp,
+        expiresAt,
+        message:
+          "✅ OTP generate हो गया। अब WhatsApp खोलकर OTP manually भेजें।",
+      });
+    }
+
+    // ========================================================
+    // ACTION: MARK SENT
+    // ========================================================
+
+    if (action === "mark-sent") {
+      const mobile = normalizeMobile(body.mobile);
+      const requestId = String(body.requestId || "");
+
+      const requestRef = requestId
+        ? db.ref(`passwordResetRequests/${requestId}`)
+        : null;
+
+      if (!requestRef) {
+        return sendJSON(res, 400, {
+          success: false,
+          message: "Request ID required.",
+        });
+      }
+
+      await requestRef.update({
+        status: "sent",
+        sentAt: Date.now(),
+      });
+
+      return sendJSON(res, 200, {
+        success: true,
+        message: "WhatsApp sent status saved.",
+      });
+    }
+
+    // ========================================================
+    // ACTION: CLEAR
+    // ========================================================
+
+    if (action === "clear") {
+      const requestId = String(body.requestId || "");
+
+      if (!requestId) {
+        return sendJSON(res, 400, {
+          success: false,
+          message: "Request ID required.",
+        });
+      }
+
+      const requestRef = db.ref(
+        `passwordResetRequests/${requestId}`
+      );
+
+      const requestSnap = await requestRef.get();
+
+      if (requestSnap.exists()) {
+        const data = requestSnap.val() || {};
+
+        if (data.mobile) {
+          await db
+            .ref(`passwordResetOtps/${normalizeMobile(data.mobile)}`)
+            .remove();
+        }
+      }
+
+      await requestRef.remove();
+
+      return sendJSON(res, 200, {
+        success: true,
+        message: "Request cleared.",
+      });
+    }
+
+    // ========================================================
+    // ACTION: VERIFY
+    // User sends OTP + new password.
+    // ========================================================
+
+    if (action === "verify") {
+      const mobile = normalizeMobile(body.mobile);
+      const otp = String(body.otp || "").trim();
+      const newPassword = String(body.newPassword || "");
+
+      if (!/^[6-9]\d{9}$/.test(mobile)) {
+        return sendJSON(res, 400, {
+          success: false,
+          message: "Invalid mobile number.",
         });
       }
 
       if (!/^\d{6}$/.test(otp)) {
         return sendJSON(res, 400, {
           success: false,
-          message: "OTP 6 digit ka hona chahiye.",
+          message: "OTP 6 digit का होना चाहिए।",
         });
       }
 
-      const db = firebaseAdmin.database();
-
-      const snapshot = await db
-        .ref(`passwordResetOtps/${mobile}`)
-        .get();
-
-      if (!snapshot.exists()) {
+      if (newPassword.length < 6) {
         return sendJSON(res, 400, {
           success: false,
           message:
-            "OTP nahi mila. Pehle OTP generate karein.",
+            "Password कम से कम 6 characters का होना चाहिए।",
         });
       }
 
-      const data = snapshot.val();
+      const otpRef = db.ref(
+        `passwordResetOtps/${mobile}`
+      );
 
-      // --------------------------------------------
-      // Check expiry
-      // --------------------------------------------
+      const otpSnap = await otpRef.get();
+
+      if (!otpSnap.exists()) {
+        return sendJSON(res, 400, {
+          success: false,
+          message:
+            "OTP नहीं मिला। Admin से नया OTP प्राप्त करें।",
+        });
+      }
+
+      const otpData = otpSnap.val() || {};
 
       if (
-        !data.expiresAt ||
-        Date.now() > Number(data.expiresAt)
+        !otpData.expiresAt ||
+        Date.now() > Number(otpData.expiresAt)
       ) {
-        await db
-          .ref(`passwordResetOtps/${mobile}`)
-          .remove();
+        await otpRef.remove();
 
         return sendJSON(res, 400, {
           success: false,
           message:
-            "OTP expire ho gaya. Naya OTP generate karein.",
+            "OTP expire हो गया। Admin से नया OTP लें।",
         });
       }
 
-      // --------------------------------------------
-      // Check attempts
-      // --------------------------------------------
-
-      const attempts =
-        Number(data.attempts || 0);
+      const attempts = Number(
+        otpData.attempts || 0
+      );
 
       if (attempts >= 5) {
-        await db
-          .ref(`passwordResetOtps/${mobile}`)
-          .remove();
+        await otpRef.remove();
 
         return sendJSON(res, 429, {
           success: false,
           message:
-            "OTP attempts limit complete ho gayi. Naya OTP generate karein.",
+            "OTP attempts limit पूरी हो गई। नया OTP लें।",
         });
       }
 
-      // --------------------------------------------
-      // Verify OTP
-      // --------------------------------------------
-
-      const enteredHash =
-        await hashOTP(otp);
-
-      if (enteredHash !== data.otpHash) {
+      // Verify OTP hash.
+      if (hashOTP(otp) !== otpData.otpHash) {
         await db
           .ref(`passwordResetOtps/${mobile}/attempts`)
           .set(attempts + 1);
 
         return sendJSON(res, 400, {
           success: false,
-          message: "OTP galat hai.",
+          message: "OTP गलत है।",
         });
       }
 
-      // --------------------------------------------
-      // OTP verified
-      // --------------------------------------------
-
-      await db
-        .ref(`passwordResetOtps/${mobile}/verified`)
-        .set(true);
-
-      return sendJSON(res, 200, {
-        success: true,
-        message: "OTP verified successfully.",
-      });
-    }
-
-    // ========================================================
-    // ACTION 3: RESET PASSWORD
-    // ========================================================
-
-    if (action === "reset-password") {
-      const mobile = normalizeMobile(body.mobile);
-
-      const newPassword =
-        String(body.newPassword || "");
-
-      if (!mobile || !newPassword) {
-        return sendJSON(res, 400, {
-          success: false,
-          message:
-            "Mobile number aur new password required hai.",
-        });
-      }
-
-      // --------------------------------------------
-      // Password validation
-      // --------------------------------------------
-
-      if (newPassword.length < 6) {
-        return sendJSON(res, 400, {
-          success: false,
-          message:
-            "Password kam se kam 6 characters ka hona chahiye.",
-        });
-      }
-
-      const db = firebaseAdmin.database();
-
-      const snapshot = await db
-        .ref(`passwordResetOtps/${mobile}`)
-        .get();
-
-      if (!snapshot.exists()) {
-        return sendJSON(res, 400, {
-          success: false,
-          message:
-            "Password reset session nahi mila.",
-        });
-      }
-
-      const data = snapshot.val();
-
-      // --------------------------------------------
-      // OTP expiry
-      // --------------------------------------------
-
-      if (
-        !data.expiresAt ||
-        Date.now() > Number(data.expiresAt)
-      ) {
-        await db
-          .ref(`passwordResetOtps/${mobile}`)
-          .remove();
-
-        return sendJSON(res, 400, {
-          success: false,
-          message:
-            "Reset session expire ho gaya.",
-        });
-      }
-
-      // --------------------------------------------
-      // OTP verification required
-      // --------------------------------------------
-
-      if (data.verified !== true) {
-        return sendJSON(res, 403, {
-          success: false,
-          message:
-            "Pehle OTP verify karein.",
-        });
-      }
-
-      // --------------------------------------------
-      // Find Firebase user
-      // --------------------------------------------
-
-      const user =
-        await findUserByMobile(
-          firebaseAdmin,
-          mobile
-        );
+      const user = await findUserByMobile(
+        firebaseAdmin,
+        mobile
+      );
 
       if (!user) {
         return sendJSON(res, 404, {
           success: false,
-          message:
-            "User account nahi mila.",
+          message: "User account नहीं मिला।",
         });
       }
-
-      // --------------------------------------------
-      // Update Firebase Auth Password
-      // --------------------------------------------
 
       await firebaseAdmin
         .auth()
@@ -535,41 +595,47 @@ export default async function handler(req, res) {
           password: newPassword,
         });
 
-      // --------------------------------------------
-      // Delete OTP data
-      // --------------------------------------------
+      await otpRef.remove();
 
-      await db
-        .ref(`passwordResetOtps/${mobile}`)
-        .remove();
+      const request = await getRequestByMobile(
+        db,
+        mobile
+      );
+
+      if (request) {
+        await db
+          .ref(`passwordResetRequests/${request.id}`)
+          .update({
+            status: "used",
+            usedAt: Date.now(),
+            otp: null,
+          });
+      }
 
       return sendJSON(res, 200, {
         success: true,
         message:
-          "Password successfully change ho gaya.",
+          "Password successfully change हो गया।",
       });
     }
-
-    // ========================================================
-    // UNKNOWN ACTION
-    // ========================================================
 
     return sendJSON(res, 400, {
       success: false,
       message:
-        "Invalid action. Use send-otp, verify-otp or reset-password.",
+        "Invalid action. Use request, generate, mark-sent, clear or verify.",
     });
   } catch (error) {
-    console.error(
-      "PASSWORD RESET API ERROR:",
-      error
-    );
+    console.error("PASSWORD RESET API ERROR:", error);
 
-    return sendJSON(res, 500, {
-      success: false,
-      message:
-        error?.message ||
-        "Server error occurred.",
-    });
+    return sendJSON(
+      res,
+      Number(error?.statusCode || 500),
+      {
+        success: false,
+        message:
+          error?.message ||
+          "Server error occurred.",
+      }
+    );
   }
 }
