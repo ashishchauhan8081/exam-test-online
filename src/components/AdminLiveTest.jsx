@@ -23,27 +23,30 @@ const EMPTY_FORM = {
 
 const normalizeQuestions = (value) => {
   let list = value;
+  if (Array.isArray(value?.questions)) list = value.questions;
+  if (Array.isArray(value?.data)) list = value.data;
   if (!Array.isArray(list) && list && typeof list === "object") list = Object.values(list);
   if (!Array.isArray(list)) return [];
 
   return list.slice(0, 150).map((q, i) => {
     const options = Array.isArray(q?.options)
       ? q.options
-      : [q?.options?.A, q?.options?.B, q?.options?.C, q?.options?.D];
+      : [q?.options?.A ?? q?.optionA ?? q?.A, q?.options?.B ?? q?.optionB ?? q?.B, q?.options?.C ?? q?.optionC ?? q?.C, q?.options?.D ?? q?.optionD ?? q?.D];
 
-    let answer = q?.answerIndex ?? q?.answer ?? 0;
+    let answer = q?.answerIndex ?? q?.answer ?? q?.correctAnswer ?? q?.correct ?? 0;
     if (typeof answer === "string") {
       const s = answer.trim().toUpperCase();
-      answer = ["A", "B", "C", "D"].indexOf(s);
-      if (answer < 0 && !Number.isNaN(Number(s))) answer = Number(s);
+      const letterIndex = ["A", "B", "C", "D"].indexOf(s);
+      answer = letterIndex >= 0 ? letterIndex : Number(s);
+      if ([1, 2, 3, 4].includes(answer)) answer -= 1;
     }
     answer = Number(answer);
     if (!Number.isInteger(answer) || answer < 0 || answer > 3) answer = 0;
 
     return {
       id: q?.id || `q-${i + 1}`,
-      question: String(q?.question || q?.questionText || "").trim(),
-      options: [0, 1, 2, 3].map((n) => String(options?.[n] || "")),
+      question: String(q?.question || q?.questionText || q?.text || "").trim(),
+      options: [0, 1, 2, 3].map((n) => String(options?.[n] ?? "")),
       answer,
       explanation: Array.isArray(q?.explanation)
         ? q.explanation.join("\n")
@@ -65,7 +68,21 @@ export default function AdminLiveTest() {
   const [generating, setGenerating] = useState(false);
   const [checkingTest, setCheckingTest] = useState(false);
   const [uploadingJson, setUploadingJson] = useState(false);
+  const [reviewQuestions, setReviewQuestions] = useState([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [questionZoneTests, setQuestionZoneTests] = useState([]);
+
+  useEffect(() => {
+    return onValue(ref(db, "tests"), (snapshot) => {
+      const data = snapshot.val() || {};
+      const list = Object.entries(data).map(([id, value]) => ({
+        id,
+        ...(value || {}),
+        questions: normalizeQuestions(value?.questions),
+      }));
+      setQuestionZoneTests(list);
+    });
+  }, []);
 
   useEffect(() => {
     return onValue(ref(db, "liveTests"), (snapshot) => {
@@ -75,19 +92,6 @@ export default function AdminLiveTest() {
       setTests(list);
     });
   }, []);
-  useEffect(() => {
-  return onValue(ref(db, "tests"), (snapshot) => {
-    const data = snapshot.val() || {};
-
-    const list = Object.entries(data).map(([id, value]) => ({
-      id,
-      ...value,
-      questions: normalizeQuestions(value?.questions),
-    }));
-
-    setQuestionZoneTests(list);
-  });
-}, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -116,13 +120,43 @@ export default function AdminLiveTest() {
         questionsJson: JSON.stringify(questions, null, 2),
         totalQuestions: questions.length,
       }));
+      setReviewQuestions(questions);
+      setReviewOpen(true);
 
-      alert(`✅ ${questions.length} Questions JSON से पढ़े गए।`);
+      alert(`✅ ${questions.length} Questions JSON से पढ़े गए। Review / Edit खुल गया है।`);
     } catch (error) {
       alert(`❌ JSON file पढ़ी नहीं जा सकी।\n${error.message}`);
     } finally {
       setUploadingJson(false);
     }
+  };
+
+  const updateReviewQuestion = (index, field, value) => {
+    setReviewQuestions((prev) =>
+      prev.map((q, i) => {
+        if (i !== index) return q;
+        if (field.startsWith("option")) {
+          const optionIndex = Number(field.replace("option", ""));
+          const options = [...(q.options || ["", "", "", ""])];
+          options[optionIndex] = value;
+          return { ...q, options };
+        }
+        return { ...q, [field]: value };
+      })
+    );
+  };
+
+  const saveReviewToForm = () => {
+    const normalized = normalizeQuestions(reviewQuestions);
+    if (!normalized.length) return alert("❌ कोई valid Question नहीं है।");
+    setForm((p) => ({
+      ...p,
+      questionsJson: JSON.stringify(normalized, null, 2),
+      totalQuestions: normalized.length,
+    }));
+    setReviewQuestions(normalized);
+    setReviewOpen(false);
+    alert(`✅ ${normalized.length} Questions Review करके Form में रखे गए।`);
   };
 
   const resetForm = () => {
@@ -362,78 +396,30 @@ export default function AdminLiveTest() {
             <input name="examName" value={form.examName} onChange={handleChange} placeholder="जैसे UPPCS 2026" />
           </div>
 
-          {/* Questions From */}
-<div className="admin-field" style={{ gridColumn: "1 / -1" }}>
-  <label>🧩 Questions From *</label>
+          <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+            <label>📝 Question Source *</label>
+            <select name="questionSource" value={form.questionSource} onChange={handleChange}>
+              <option value="existing">📚 Questions Zone / Existing Test</option>
+              <option value="json">🧩 Questions JSON</option>
+              <option value="gemini">🤖 Gemini AI</option>
+              <option value="ncert">📖 NCERT + Gemini</option>
+            </select>
+          </div>
 
-  <select
-    name="questionSource"
-    value={form.questionSource}
-    onChange={handleChange}
-  >
-    <option value="existing">
-      📚 Questions Zone / Existing Test
-    </option>
-
-    <option value="json">
-      🧩 Questions JSON
-    </option>
-
-    <option value="gemini">
-      🤖 Gemini AI
-    </option>
-
-    <option value="ncert">
-      📖 NCERT + Gemini
-    </option>
-  </select>
-</div>
-
-{/* Questions Zone Test Selection */}
-{form.questionSource === "existing" && (
-  <div
-    className="admin-field"
-    style={{ gridColumn: "1 / -1" }}
-  >
-    <label>📚 Questions Zone से Test चुनें *</label>
-
-    <select
-      name="testId"
-      value={form.testId}
-      onChange={handleChange}
-    >
-      <option value="">
-        -- Questions Zone का Test चुनें --
-      </option>
-
-      {questionZoneTests.map((test) => {
-        const qCount = normalizeQuestions(test.questions).length;
-
-        return (
-          <option key={test.id} value={test.id}>
-            {test.testName ||
-              test.name ||
-              test.examName ||
-              "Untitled Test"}{" "}
-            — {qCount} Questions
-          </option>
-        );
-      })}
-    </select>
-
-    {form.testId && (
-      <small style={{ display: "block", marginTop: 8 }}>
-        ✅ Selected Test ID: {form.testId}
-      </small>
-    )}
-
-    {!questionZoneTests.length && (
-      <small style={{ display: "block", marginTop: 8 }}>
-        ⚠️ Questions Zone में कोई Test उपलब्ध नहीं है।
-      </small>
-    )}
-  </div>
-)}
+          {form.questionSource === "existing" && (
+            <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
+              <label>📚 Questions Zone से Test चुनें *</label>
+              <select name="testId" value={form.testId} onChange={handleChange}>
+                <option value="">-- Questions Zone का Test चुनें --</option>
+                {questionZoneTests.map((test) => (
+                  <option key={test.id} value={test.id}>
+                    {test.testName || test.title || test.name || test.examName || "Untitled Test"} — {questionCount(test.questions)} Questions
+                  </option>
+                ))}
+              </select>
+              {form.testId && <small>✅ Selected Test ID: {form.testId}</small>}
+              {!questionZoneTests.length && <small>⚠️ Questions Zone में अभी कोई Test उपलब्ध नहीं है।</small>}
+            </div>
           )}
 
           {form.questionSource === "json" && (
@@ -470,8 +456,18 @@ export default function AdminLiveTest() {
                     e.target.value = "";
                   }}
                 />
-                <small>JSON file चुनते ही Questions नीचे textarea में भर जाएँगे।</small>
+                <small>JSON file चुनते ही Review / Edit खुलेगा और Questions textarea में भी भरेंगे।</small>
               </div>
+
+              {reviewQuestions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  style={{ marginBottom: 10 }}
+                >
+                  👀 Review / Edit {reviewQuestions.length} Questions
+                </button>
+              )}
 
               <textarea
                 name="questionsJson"
@@ -551,6 +547,48 @@ export default function AdminLiveTest() {
           );
         })}
       </div>
+
+      {reviewOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,.65)", padding: "20px", overflowY: "auto"
+          }}
+        >
+          <div style={{ maxWidth: 1000, margin: "0 auto", background: "#fff", borderRadius: 16, padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", top: 0, background: "#fff", paddingBottom: 12, zIndex: 2 }}>
+              <div>
+                <h2 style={{ margin: 0 }}>📝 Questions Review / Edit</h2>
+                <small>{reviewQuestions.length} Questions — JSON से पढ़े गए</small>
+              </div>
+              <button type="button" onClick={() => setReviewOpen(false)}>✕ Close</button>
+            </div>
+
+            {reviewQuestions.map((q, index) => (
+              <div key={q.id || index} style={{ border: "1px solid #dbeafe", borderRadius: 12, padding: 14, marginTop: 14, background: "#f8fafc" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <strong>Question {index + 1}</strong>
+                  <button type="button" onClick={() => setReviewQuestions((prev) => prev.filter((_, i) => i !== index))}>🗑️ Delete</button>
+                </div>
+                <textarea rows={3} value={q.question || ""} onChange={(e) => updateReviewQuestion(index, "question", e.target.value)} style={{ width: "100%", marginTop: 8 }} />
+                {[0,1,2,3].map((opt) => (
+                  <div key={opt} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 8, alignItems: "center", marginTop: 8 }}>
+                    <strong>{String.fromCharCode(65 + opt)}</strong>
+                    <input value={q.options?.[opt] || ""} onChange={(e) => updateReviewQuestion(index, `option${opt}`, e.target.value)} />
+                    <label><input type="radio" name={`review-answer-${index}`} checked={Number(q.answer) === opt} onChange={() => updateReviewQuestion(index, "answer", opt)} /> सही</label>
+                  </div>
+                ))}
+                <textarea rows={3} placeholder="व्याख्या" value={q.explanation || ""} onChange={(e) => updateReviewQuestion(index, "explanation", e.target.value)} style={{ width: "100%", marginTop: 8 }} />
+              </div>
+            ))}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 18, position: "sticky", bottom: 0, background: "#fff", paddingTop: 12 }}>
+              <button type="button" onClick={saveReviewToForm}>💾 Review Save करके Form में रखें</button>
+              <button type="button" onClick={() => setReviewOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
