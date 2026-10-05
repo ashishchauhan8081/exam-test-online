@@ -64,6 +64,7 @@ export default function AdminLiveTest() {
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [checkingTest, setCheckingTest] = useState(false);
+  const [uploadingJson, setUploadingJson] = useState(false);
 
   useEffect(() => {
     return onValue(ref(db, "liveTests"), (snapshot) => {
@@ -77,6 +78,37 @@ export default function AdminLiveTest() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((p) => ({ ...p, [name]: value }));
+  };
+
+  const handleJsonFileUpload = async (file) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".json") && file.type !== "application/json") {
+      return alert("❌ केवल JSON file upload करें।");
+    }
+
+    try {
+      setUploadingJson(true);
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const questions = normalizeQuestions(parsed);
+
+      if (!questions.length) {
+        return alert("❌ JSON में valid Questions नहीं मिले।");
+      }
+
+      // Review/Edit के लिए normalized JSON वापस textarea में रखें।
+      setForm((p) => ({
+        ...p,
+        questionsJson: JSON.stringify(questions, null, 2),
+        totalQuestions: questions.length,
+      }));
+
+      alert(`✅ ${questions.length} Questions JSON से पढ़े गए।`);
+    } catch (error) {
+      alert(`❌ JSON file पढ़ी नहीं जा सकी।\n${error.message}`);
+    } finally {
+      setUploadingJson(false);
+    }
   };
 
   const resetForm = () => {
@@ -340,7 +372,47 @@ export default function AdminLiveTest() {
           {form.questionSource === "json" && (
             <div className="admin-field" style={{ gridColumn: "1 / -1" }}>
               <label>Questions JSON *</label>
-              <textarea name="questionsJson" value={form.questionsJson} onChange={handleChange} rows={10} placeholder='[{"question":"...","options":["A","B","C","D"],"answer":0,"explanation":"..."}]' />
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                <label
+                  htmlFor="questions-json-file"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    background: "#0f766e",
+                    color: "#fff",
+                    cursor: uploadingJson ? "not-allowed" : "pointer",
+                    fontWeight: 700,
+                    opacity: uploadingJson ? 0.7 : 1,
+                  }}
+                >
+                  📁 {uploadingJson ? "JSON पढ़ी जा रही है..." : "JSON File Upload करें"}
+                </label>
+                <input
+                  id="questions-json-file"
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={uploadingJson}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    handleJsonFileUpload(file);
+                    e.target.value = "";
+                  }}
+                />
+                <small>JSON file चुनते ही Questions नीचे textarea में भर जाएँगे।</small>
+              </div>
+
+              <textarea
+                name="questionsJson"
+                value={form.questionsJson}
+                onChange={handleChange}
+                rows={10}
+                placeholder='[{"question":"...","options":["A","B","C","D"],"answer":0,"explanation":"..."}]'
+              />
             </div>
           )}
 
