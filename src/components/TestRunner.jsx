@@ -440,6 +440,19 @@ function getExamTrick(q) {
   );
 }
 
+function getQuestionImage(q) {
+  return (
+    q?.questionImage ??
+    q?.graphImage ??
+    q?.chartImage ??
+    q?.image ??
+    q?.graph ??
+    q?.chart ??
+    ""
+  );
+}
+
+
 // ======================================================
 // FORMAT FACT
 // ======================================================
@@ -1060,6 +1073,33 @@ export default function TestRunner({
                     {q?.question}
                   </h3>
 
+                  {getQuestionImage(q) && (
+                    <div
+                      style={{
+                        marginTop: 14,
+                        marginBottom: 16,
+                        textAlign: "center",
+                      }}
+                    >
+                      <img
+                        src={getQuestionImage(q)}
+                        alt={`Question ${i + 1} Graph / Chart`}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          maxWidth: 900,
+                          height: "auto",
+                          maxHeight: 650,
+                          objectFit: "contain",
+                          margin: "0 auto",
+                          borderRadius: 12,
+                          border: "1px solid #dbe3ee",
+                          background: "#fff",
+                        }}
+                      />
+                    </div>
+                  )}
+
                   <div
                     style={{
                       marginTop: 8,
@@ -1424,6 +1464,33 @@ export default function TestRunner({
             Q.{current + 1}{" "}
             {question?.question}
           </h2>
+
+          {/* GRAPH / CHART / QUESTION IMAGE */}
+          {getQuestionImage(question) && (
+            <div
+              style={{
+                margin: "0 auto 20px",
+                textAlign: "center",
+              }}
+            >
+              <img
+                src={getQuestionImage(question)}
+                alt={`Question ${current + 1} Graph / Chart`}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  maxWidth: 900,
+                  height: "auto",
+                  maxHeight: 650,
+                  objectFit: "contain",
+                  margin: "0 auto",
+                  borderRadius: 12,
+                  border: "1px solid #dbe3ee",
+                  background: "#fff",
+                }}
+              />
+            </div>
+          )}
 
           {/* OPTIONS */}
 
