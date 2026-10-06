@@ -84,69 +84,67 @@ function createQuestion(id = 1) {
 ========================================================= */
 
 function normalizeAnswer(q) {
-  /*
-    answerIndex हमेशा 0-3 माना जाएगा।
-  */
+  // हमेशा 0-3 index: A=0, B=1, C=2, D=3
 
-  if (
-    q?.answerIndex !== undefined &&
-    q?.answerIndex !== null
-  ) {
-    const value = Number(q.answerIndex);
-
-    if (
-      Number.isInteger(value) &&
-      value >= 0 &&
-      value <= 3
-    ) {
-      return value;
-    }
+  // Explicit zero-based index को सबसे पहले प्राथमिकता दें
+  const explicitIndex = q?.answerIndex ?? q?.correctIndex;
+  if (explicitIndex !== undefined && explicitIndex !== null && explicitIndex !== "") {
+    const n = Number(explicitIndex);
+    if (Number.isInteger(n) && n >= 0 && n <= 3) return n;
   }
 
-  let answer =
-    q?.answer ??
-    q?.correctAnswer ??
-    q?.correct ??
-    0;
+  let answer = q?.answer ?? q?.correctAnswer ?? q?.correct;
+  if (answer === undefined || answer === null || answer === "") return 0;
 
-  if (typeof answer === "string") {
-    const value = answer.trim().toUpperCase();
-
-    if (value === "A") return 0;
-    if (value === "B") return 1;
-    if (value === "C") return 2;
-    if (value === "D") return 3;
-
-    if (/^\d+$/.test(value)) {
-      answer = Number(value);
-    } else {
-      return 0;
-    }
+  // Numeric answer
+  if (typeof answer === "number") {
+    if (Number.isInteger(answer) && answer >= 0 && answer <= 3) return answer;
+    if (answer === 4) return 3;
+    return 0;
   }
 
-  answer = Number(answer);
+  const value = String(answer).trim();
+  const upper = value.toUpperCase();
 
-  /*
-    अगर JSON में 1-4 दिया गया है:
-    1=A, 2=B, 3=C, 4=D
-  */
-
-  if (
-    Number.isInteger(answer) &&
-    answer >= 1 &&
-    answer <= 4
-  ) {
-    return answer - 1;
+  // A/B/C/D
+  if (/^[ABCD]$/.test(upper)) {
+    return upper.charCodeAt(0) - 65;
   }
 
-  if (
-    Number.isInteger(answer) &&
-    answer >= 0 &&
-    answer <= 3
-  ) {
-    return answer;
+  // A) / B. / C: / D-
+  const letterMatch = upper.match(/^([ABCD])\s*[)\.\-:]/);
+  if (letterMatch) {
+    return letterMatch[1].charCodeAt(0) - 65;
   }
 
+  // 1/2/3/4 => A/B/C/D
+  if (/^[1-4]$/.test(upper)) {
+    return Number(upper) - 1;
+  }
+
+  // पूरा correct option text हो तो options से match करें
+  const options = Array.isArray(q?.options)
+    ? q.options
+    : [
+        q?.optionA ?? q?.A ?? "",
+        q?.optionB ?? q?.B ?? "",
+        q?.optionC ?? q?.C ?? "",
+        q?.optionD ?? q?.D ?? "",
+      ];
+
+  const normalizedAnswer = value
+    .replace(/^[ABCD]\s*[)\.\-:]\s*/i, "")
+    .trim()
+    .toLowerCase();
+
+  const matchedIndex = options.findIndex(
+    (option) =>
+      String(option ?? "").trim().toLowerCase() === normalizedAnswer
+  );
+
+  if (matchedIndex >= 0 && matchedIndex <= 3) return matchedIndex;
+
+  console.warn("Answer match नहीं मिला:", answer, options);
   return 0;
 }
 
