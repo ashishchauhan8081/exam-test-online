@@ -1814,6 +1814,46 @@ function HomePage({
 
   const visibleNotice = announcements.find(x => x.id !== closedNotice);
 
+  const shareWebsite = async () => {
+    const productionUrl = "https://exam-test-online.vercel.app";
+    const currentUrl = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1")
+      ? productionUrl
+      : window.location.href;
+    const shareData = {
+      title: "Exam Test",
+      text: "Exam Test - Online Exam & Test Series Platform",
+      url: currentUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await navigator.clipboard.writeText(currentUrl);
+      alert("✅ Website link copy हो गया। अब आप इसे WhatsApp, Telegram या कहीं भी Share कर सकते हैं।");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = currentUrl;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        textArea.remove();
+        alert("✅ Website link copy हो गया।");
+      } catch (copyError) {
+        console.error("Share/Copy Error:", copyError);
+        alert(`📤 Website Share करें: ${currentUrl}`);
+      }
+    }
+  };
+
   return (
     <div className="app-container">
 
@@ -1980,7 +2020,10 @@ function HomePage({
 
         <section style={{margin:"18px 0",padding:16,background:"#ecfdf5",border:"1px solid #86efac",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div><strong style={{fontSize:18}}>💬 Help & Support</strong><div style={{color:"#166534",marginTop:4}}>किसी भी समस्या के लिए WhatsApp पर हमसे संपर्क करें।</div></div>
-          <button type="button" onClick={()=>{const n=import.meta.env.VITE_WHATSAPP_SUPPORT_NUMBER||"91XXXXXXXXXX"; window.open(`https://wa.me/${String(n).replace(/\D/g,"")}?text=${encodeURIComponent("Hello Exam Test Support")}`,"_blank","noopener,noreferrer")}} style={{background:"#16a34a",color:"#fff",border:0,borderRadius:10,padding:"11px 16px",fontWeight:800,cursor:"pointer"}}>🟢 WhatsApp Support</button>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <button type="button" onClick={shareWebsite} style={{background:"#2563eb",color:"#fff",border:0,borderRadius:10,padding:"11px 16px",fontWeight:800,cursor:"pointer"}}>📤 Share Website</button>
+            <button type="button" onClick={()=>{const n=import.meta.env.VITE_WHATSAPP_SUPPORT_NUMBER||"91XXXXXXXXXX"; window.open(`https://wa.me/${String(n).replace(/\D/g,"")}?text=${encodeURIComponent("Hello Exam Test Support")}`,"_blank","noopener,noreferrer")}} style={{background:"#16a34a",color:"#fff",border:0,borderRadius:10,padding:"11px 16px",fontWeight:800,cursor:"pointer"}}>🟢 WhatsApp Support</button>
+          </div>
         </section>
 
         {/* =================================================

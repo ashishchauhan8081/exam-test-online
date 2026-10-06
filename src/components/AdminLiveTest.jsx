@@ -28,32 +28,72 @@ const normalizeQuestions = (value) => {
   if (!Array.isArray(list) && list && typeof list === "object") list = Object.values(list);
   if (!Array.isArray(list)) return [];
 
+  const first = (obj, keys, fallback = "") => {
+    for (const key of keys) {
+      const val = obj?.[key];
+      if (val !== undefined && val !== null && String(val).trim() !== "") return val;
+    }
+    return fallback;
+  };
+
   return list.slice(0, 150).map((q, i) => {
+    const optionObject = q?.options && !Array.isArray(q.options) && typeof q.options === "object"
+      ? q.options
+      : null;
+
     const options = Array.isArray(q?.options)
       ? q.options
-      : [q?.options?.A ?? q?.optionA ?? q?.A, q?.options?.B ?? q?.optionB ?? q?.B, q?.options?.C ?? q?.optionC ?? q?.C, q?.options?.D ?? q?.optionD ?? q?.D];
+      : [
+          first(optionObject || q, ["A", "a", "optionA", "OptionA", "option1", "Option1", "विकल्पA", "विकल्प A"]),
+          first(optionObject || q, ["B", "b", "optionB", "OptionB", "option2", "Option2", "विकल्पB", "विकल्प B"]),
+          first(optionObject || q, ["C", "c", "optionC", "OptionC", "option3", "Option3", "विकल्पC", "विकल्प C"]),
+          first(optionObject || q, ["D", "d", "optionD", "OptionD", "option4", "Option4", "विकल्पD", "विकल्प D"]),
+        ];
 
-    let answer = q?.answerIndex ?? q?.answer ?? q?.correctAnswer ?? q?.correct ?? 0;
+    let answer = first(q, [
+      "answerIndex", "answer", "correctAnswer", "correct", "correctOption",
+      "correctAnswerIndex", "rightAnswer", "सहीउत्तर", "सही उत्तर", "उत्तर"
+    ], 0);
+
+    if (typeof answer === "object" && answer !== null) {
+      answer = first(answer, ["index", "value", "answer"], 0);
+    }
+
     if (typeof answer === "string") {
-      const s = answer.trim().toUpperCase();
-      const letterIndex = ["A", "B", "C", "D"].indexOf(s);
-      answer = letterIndex >= 0 ? letterIndex : Number(s);
+      const s = answer.trim();
+      const upper = s.toUpperCase();
+      const letterIndex = ["A", "B", "C", "D"].indexOf(upper);
+      const hindiLetterIndex = ["ए", "बी", "सी", "डी"].indexOf(s);
+      const numberMatch = s.match(/\d+/);
+      if (letterIndex >= 0) answer = letterIndex;
+      else if (hindiLetterIndex >= 0) answer = hindiLetterIndex;
+      else if (numberMatch) answer = Number(numberMatch[0]);
+      else answer = 0;
       if ([1, 2, 3, 4].includes(answer)) answer -= 1;
     }
     answer = Number(answer);
     if (!Number.isInteger(answer) || answer < 0 || answer > 3) answer = 0;
 
+    const question = first(q, [
+      "question", "Question", "questionText", "QuestionText", "text", "Text",
+      "ques", "q", "प्रश्न", "प्रश्नText"
+    ]);
+
+    const explanationValue = first(q, [
+      "explanation", "Explanation", "solution", "Solution", "explain", "व्याख्या", "समाधान"
+    ]);
+
     return {
-      id: q?.id || `q-${i + 1}`,
-      question: String(q?.question || q?.questionText || q?.text || "").trim(),
-      options: [0, 1, 2, 3].map((n) => String(options?.[n] ?? "")),
+      id: first(q, ["id", "ID", "questionId"], `q-${i + 1}`),
+      question: String(question).trim(),
+      options: [0, 1, 2, 3].map((n) => String(options?.[n] ?? "").trim()),
       answer,
-      explanation: Array.isArray(q?.explanation)
-        ? q.explanation.join("\n")
-        : String(q?.explanation || q?.solution || ""),
+      explanation: Array.isArray(explanationValue)
+        ? explanationValue.join("\n")
+        : String(explanationValue || ""),
       explanationPoints: Array.isArray(q?.explanationPoints)
-  ? q.explanationPoints
-  : [],
+        ? q.explanationPoints
+        : [],
     };
   });
 };
